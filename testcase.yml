@@ -1,8 +1,8 @@
 compile:
-  commands: make
+  commands: bash build.sh
 
 run:
-  commands: ["python3", "hello.py"]
+  commands: ./build/release/dbs
   flags:
     - no_use
 
