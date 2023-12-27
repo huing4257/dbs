@@ -6,8 +6,7 @@ stages:
   - test
 
 main:
-  stage:
-    - build
+  stage: build
   script:
     - bash build.sh
   after_script:
@@ -16,7 +15,6 @@ main:
     - master
     - parser
     - ci
-
 
 run-all-test:
   tags:
