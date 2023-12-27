@@ -2,7 +2,20 @@ default:
   image: dbs-testcase:latest
 
 stages:
+  - build
   - test
+
+main:
+  stage:
+    - build
+  script:
+    - bash build.sh
+  after_script:
+    - rm -rf build
+  only:
+    - master
+    - ci
+
 
 run-all-test:
   tags:
