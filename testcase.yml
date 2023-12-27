@@ -2,7 +2,7 @@ compile:
   commands: bash build.sh
 
 run:
-  commands: ./build/release/dbs
+  commands: ./build/dbs
   flags:
     - no_use
 

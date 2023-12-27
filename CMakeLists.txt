@@ -2,11 +2,12 @@ cmake_minimum_required(VERSION 3.5 FATAL_ERROR)
 
 project (dbs)
 
-find_package(antlr4-runtime REQUIRED)
-
 include_directories(
-  ${antlr4-runtime_INCLUDE_DIR}
-  src/parser
+  linux_runtime/usr/local/include/antlr4-runtime/
+)
+
+link_directories(
+  linux_runtime/usr/local/lib/
 )
 
 set(SOURCES_STAGE
@@ -17,7 +18,7 @@ set(SOURCES_STAGE
 
 add_executable(${PROJECT_NAME} ${SOURCES_STAGE} )
 
-target_link_libraries(${PROJECT_NAME} ${CONAN_LIBS} antlr4_static -pthread )
+target_link_libraries(${PROJECT_NAME} antlr4-runtime)
 
 set_target_properties(${PROJECT_NAME} PROPERTIES CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON)
 

@@ -1,5 +1,4 @@
-pip install conan
-conan profile detect
-conan source .
-conan install . --build missing
-conan build .  --build missing
+mkdir build 
+cd build
+cmake ..
+make
