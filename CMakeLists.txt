@@ -2,13 +2,23 @@ cmake_minimum_required(VERSION 3.5 FATAL_ERROR)
 
 project (dbs)
 
-include_directories(
-  linux_runtime/usr/local/include/antlr4-runtime/
-)
+if(APPLE)
+  include_directories(
+    macos_runtime/usr/local/include/antlr4-runtime/
+  )
 
-link_directories(
-  linux_runtime/usr/local/lib/
-)
+  link_directories(
+    macos_runtime/usr/local/lib/
+  )
+elseif(UNIX)
+  include_directories(
+    linux_runtime/usr/local/include/antlr4-runtime/
+  )
+
+  link_directories(
+    linux_runtime/usr/local/lib/
+  )
+endif()
 
 set(SOURCES_STAGE
     src/main.cpp
