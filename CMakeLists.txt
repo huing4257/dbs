@@ -2,9 +2,6 @@ cmake_minimum_required(VERSION 3.5 FATAL_ERROR)
 
 project(dbs)
 
-include_directories(
-        include
-)
 
 if (APPLE)
     include_directories(
@@ -23,6 +20,10 @@ elseif (UNIX)
             linux_runtime/usr/local/lib/
     )
 endif ()
+
+include_directories(
+        include
+)
 
 set(SOURCES_STAGE
         src/main.cpp

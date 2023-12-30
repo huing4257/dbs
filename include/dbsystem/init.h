@@ -4,6 +4,8 @@
 
 #ifndef DBS_INIT_H
 #define DBS_INIT_H
+#include <sys/stat.h>
+#include <iostream>
 int init_dir(){
     mkdir("data", 0777);
     mkdir("data/global", 0777);

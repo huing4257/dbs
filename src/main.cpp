@@ -5,12 +5,19 @@
 #include "dbsystem/init.h"
 #include "parser/SQLLexer.h"
 #include "parser/visitor.h"
+#include <filesystem>
 
 using namespace std;
 
-int main() {
+int main(int argc, char *argv[]) {
     // create directory structure
-    init_dir();
+    for (int i = 0; i < argc; i++) {
+        if (strcmp(argv[i], "--init") == 0) {
+            filesystem::remove_all("data");
+            init_dir();
+            return 0;
+        }
+    }
     // main loop
     while (true) {
         std::string line;
@@ -23,6 +30,9 @@ int main() {
         antlr4::CommonTokenStream tokens(&lexer);
         SQLParser parser(&tokens);
         auto tree = parser.program();
+        if (tree->children.size() <= 1) {
+            continue;
+        }
 //        cout << tree->toStringTree(&parser) << endl;
         auto visitor = Visitor();
         visitor.visit(tree);

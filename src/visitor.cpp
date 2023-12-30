@@ -29,13 +29,14 @@ std::any Visitor::visitDrop_db(SQLParser::Drop_dbContext *context) {
     try {
         filesystem::remove_all("data/base/" + db_name);
     } catch (std::exception &e) {
-        std::cout << "@DB DOESN'T EXIST" <<e.what() << std::endl;
+        std::cout << "@DB DOESN'T EXIST" << e.what() << std::endl;
     }
     return visitChildren(context);
 }
 
-std::any Visitor::visitShow_dbs(SQLParser::Show_dbsContext *context){
-    for (const auto& entry : std::filesystem::directory_iterator("data/base")) {
+std::any Visitor::visitShow_dbs(SQLParser::Show_dbsContext *context) {
+    cout << "DATABASES" << endl;
+    for (const auto &entry: std::filesystem::directory_iterator("data/base")) {
         std::cout << entry.path().filename().string() << std::endl;
     }
     return visitChildren(context);
