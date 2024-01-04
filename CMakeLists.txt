@@ -30,8 +30,9 @@ set(SOURCES_STAGE
         include/parser/SQLBaseVisitor.cpp
         include/parser/SQLLexer.cpp
         include/parser/SQLParser.cpp
-        src/SQLVisitor.cpp
-        src/SQLVisitor.cpp src/visitor.cpp include/parser/visitor.h src/visitor.cpp)
+        src/visitor.cpp
+        src/database.cpp
+        )
 
 add_executable(${PROJECT_NAME} ${SOURCES_STAGE})
 

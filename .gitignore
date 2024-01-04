@@ -4,5 +4,6 @@
 build/
 runtime*/
 mac*/
-test*
 test/
+test.sh
+testfile.txt

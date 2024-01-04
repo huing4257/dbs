@@ -33,10 +33,13 @@ int main(int argc, char *argv[]) {
         if (tree->children.size() <= 1) {
             continue;
         }
-//        cout << tree->toStringTree(&parser) << endl;
+//        cerr << tree->toStringTree(&parser) << endl;
         auto visitor = Visitor();
         visitor.visit(tree);
-        std::cout << "@" << line << std::endl;
+        if (current_db != nullptr) {
+            cout << "@" << "DB" << current_db->name << " ";
+        }
+        cout << "@" <<line << endl;
     }
     return 0;
 }

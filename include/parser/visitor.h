@@ -5,17 +5,21 @@
 #ifndef DBS_VISITOR_H
 #define DBS_VISITOR_H
 
+#include "dbsystem/database.h"
 #include "SQLVisitor.h"
+
+extern Database *current_db;
+
 class Visitor: public SQLVisitor {
     std::any visitProgram(SQLParser::ProgramContext *context) override;
     std::any visitStatement(SQLParser::StatementContext *context) override;
     std::any visitCreate_db(SQLParser::Create_dbContext *context) override;
     std::any visitDrop_db(SQLParser::Drop_dbContext *context) override;
     std::any visitShow_dbs(SQLParser::Show_dbsContext *context) override;
-    std::any visitUse_db(SQLParser::Use_dbContext *context) override { return {}; }
-    std::any visitShow_tables(SQLParser::Show_tablesContext *context) override { return {}; }
+    std::any visitUse_db(SQLParser::Use_dbContext *context) override;
+    std::any visitShow_tables(SQLParser::Show_tablesContext *context) override;
     std::any visitShow_indexes(SQLParser::Show_indexesContext *context) override { return {}; }
-    std::any visitCreate_table(SQLParser::Create_tableContext *context) override { return {}; }
+    std::any visitCreate_table(SQLParser::Create_tableContext *context) override;
     std::any visitDrop_table(SQLParser::Drop_tableContext *context) override { return {}; }
     std::any visitDescribe_table(SQLParser::Describe_tableContext *context) override { return {}; }
     std::any visitLoad_table(SQLParser::Load_tableContext *context) override { return {}; }
@@ -31,10 +35,10 @@ class Visitor: public SQLVisitor {
     std::any visitAlter_table_add_pk(SQLParser::Alter_table_add_pkContext *context) override { return {}; }
     std::any visitAlter_table_add_foreign_key(SQLParser::Alter_table_add_foreign_keyContext *context) override { return {}; }
     std::any visitAlter_table_add_unique(SQLParser::Alter_table_add_uniqueContext *context) override { return {}; }
-    std::any visitField_list(SQLParser::Field_listContext *context) override { return {}; }
-    std::any visitNormal_field(SQLParser::Normal_fieldContext *context) override { return {}; }
-    std::any visitPrimary_key_field(SQLParser::Primary_key_fieldContext *context) override { return {}; }
-    std::any visitForeign_key_field(SQLParser::Foreign_key_fieldContext *context) override { return {}; }
+    std::any visitField_list(SQLParser::Field_listContext *context) override;
+    std::any visitNormal_field(SQLParser::Normal_fieldContext *context) override;
+    std::any visitPrimary_key_field(SQLParser::Primary_key_fieldContext *context) override;
+    std::any visitForeign_key_field(SQLParser::Foreign_key_fieldContext *context) override;
     std::any visitType_(SQLParser::Type_Context *context) override { return {}; }
     std::any visitOrder(SQLParser::OrderContext *context) override { return {}; }
     std::any visitValue_lists(SQLParser::Value_listsContext *context) override { return {}; }
