@@ -5,6 +5,7 @@
 #include "dbsystem/database.h"
 #include "filesystem/bufmanager/BufPageManager.h"
 #include "filesystem/fileio/FileManager.h"
+#include <algorithm>
 auto fm = std::make_unique<FileManager>();
 
 std::vector<Database> databases = std::vector<Database>();

@@ -35,7 +35,7 @@ std::any Visitor::visitDrop_db(SQLParser::Drop_dbContext *context) {
             return db.name == db_name;
         }), databases.end());
     } catch (std::exception &e) {
-        std::cout << "@DB DOESN'T EXIST" << e.what() << std::endl;
+        std::cout << "@DB DOESN'T EXIST" << e.what() ;
     }
     return visitChildren(context);
 }
