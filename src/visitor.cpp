@@ -94,10 +94,20 @@ std::any Visitor::visitDrop_table(SQLParser::Drop_tableContext *context) {
 
 std::any Visitor::visitDescribe_table(SQLParser::Describe_tableContext *context) {
     std::string table_name = context->Identifier()->getText();
+    // record primary key
+    Field* primary_key = nullptr;
+    // record foreign key
+    std::vector<Field*> foreign_keys;
     for (auto &table: current_db->tables) {
         if (table.name == table_name) {
             cout << "Field,Type,Null,Default" << endl;
             for (auto &field: table.fields) {
+                if (field.is_primary_key) {
+                    primary_key = &field;
+                }
+                if (field.is_foreign_key) {
+                    foreign_keys.push_back(&field);
+                }
                 cout << field.name << ",";
                 switch (field.type) {
                     case FieldType::INT:
@@ -113,8 +123,19 @@ std::any Visitor::visitDescribe_table(SQLParser::Describe_tableContext *context)
                 cout << (field.allow_null ? "YES" : "NO") << ",";
                 cout << (field.default_value.has_value() ? " " : "NULL") << endl;
             }
+            cout << endl;
+            if (primary_key != nullptr) {
+                cout << "PRIMARY KEY (" << primary_key->name << ")" << endl;
+            }
+            if (!foreign_keys.empty()) {
+                cout << "FOREIGN KEY (";
+                for (auto &field: foreign_keys) {
+                    cout << field->name << ",";
+                }
+                cout << ")" << endl;
+            }
+            return {};
         }
-        return {};
     }
     std::cout << "@TABLE DOESN'T EXIST";
     return {};

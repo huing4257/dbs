@@ -56,4 +56,7 @@ public:
 };
 
 extern std::vector<Database> databases;
+
+void init_database();
+
 #endif//DBS_DATABASE_H

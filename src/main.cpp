@@ -18,7 +18,8 @@ int main(int argc, char *argv[]) {
             return 0;
         }
     }
-    init_dir();
+    // init database
+    init_database();
     // main loop
     while (true) {
         std::string line;

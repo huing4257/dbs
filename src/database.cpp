@@ -10,7 +10,16 @@ auto fm = std::make_unique<FileManager>();
 auto bpm = std::make_unique<BufPageManager>(fm.get());
 
 std::vector<Database> databases = std::vector<Database>();
+
+void init_database() {
+    for (const auto &entry: std::filesystem::directory_iterator("data/base")) {
+        if (entry.is_directory()) {
+            databases.emplace_back(entry.path().filename());
+        }
+    }
+}
 void Database::use_database() {
+    MyBitMap::initConst();//新加的初始化
     for (const auto &entry: std::filesystem::directory_iterator("data/base/" + name)) {
         Table table;
         table.name = entry.path().filename().string();
@@ -18,7 +27,6 @@ void Database::use_database() {
         table.read_file();
         tables.push_back(table);
     }
-    MyBitMap::initConst();//新加的初始化
 }
 
 void Database::close_database() {
