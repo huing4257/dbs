@@ -20,8 +20,8 @@ class Visitor: public SQLVisitor {
     std::any visitShow_tables(SQLParser::Show_tablesContext *context) override;
     std::any visitShow_indexes(SQLParser::Show_indexesContext *context) override { return {}; }
     std::any visitCreate_table(SQLParser::Create_tableContext *context) override;
-    std::any visitDrop_table(SQLParser::Drop_tableContext *context) override { return {}; }
-    std::any visitDescribe_table(SQLParser::Describe_tableContext *context) override { return {}; }
+    std::any visitDrop_table(SQLParser::Drop_tableContext *context) override;
+    std::any visitDescribe_table(SQLParser::Describe_tableContext *context) override;
     std::any visitLoad_table(SQLParser::Load_tableContext *context) override { return {}; }
     std::any visitInsert_into_table(SQLParser::Insert_into_tableContext *context) override { return {}; }
     std::any visitDelete_from_table(SQLParser::Delete_from_tableContext *context) override { return {}; }

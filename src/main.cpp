@@ -18,6 +18,7 @@ int main(int argc, char *argv[]) {
             return 0;
         }
     }
+//    init_dir();
     // main loop
     while (true) {
         std::string line;
@@ -37,7 +38,7 @@ int main(int argc, char *argv[]) {
         auto visitor = Visitor();
         visitor.visit(tree);
         if (current_db != nullptr) {
-            cout << "@" << "DB" << current_db->name << " ";
+            cout << "@" << "DB:" << current_db->name << " ";
         }
         cout << "@" <<line << endl;
     }

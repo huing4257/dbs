@@ -14,6 +14,7 @@ void Database::use_database() {
         Table table;
         table.name = entry.path().filename().string();
         fm->openFile(entry.path().string().c_str(), table.fileID);
+        tables.clear();
         tables.push_back(table);
     }
 }

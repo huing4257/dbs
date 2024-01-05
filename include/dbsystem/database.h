@@ -4,10 +4,11 @@
 
 #ifndef DBS_DATABASE_H
 #define DBS_DATABASE_H
+#include <any>
+#include <filesystem>
 #include <string>
 #include <utility>
 #include <vector>
-#include <filesystem>
 
 enum class FieldType {
     INT,
@@ -23,6 +24,8 @@ public:
     int length = 0;
     bool is_primary_key = false;
     bool is_foreign_key = false;
+    bool allow_null = true;
+    std::any default_value;
 //    std::string foreign_key_table;
 //    std::string foreign_key_field;
 };
