@@ -35,6 +35,8 @@ public:
     std::string name;
     int fileID = -1;
     std::vector<Field> fields;
+    void write_file() const;
+    void read_file();
 };
 
 class Database {

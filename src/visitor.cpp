@@ -74,7 +74,7 @@ std::any Visitor::visitCreate_table(SQLParser::Create_tableContext *context) {
     std::string table_name = context->Identifier()->getText();
     for (auto &table: current_db->tables) {
         if (table.name == table_name) {
-            std::cout << "@TABLE ALREADY EXISTS" << std::endl;
+            std::cout << "@TABLE ALREADY EXISTS";
             return {};
         }
     }
@@ -116,7 +116,7 @@ std::any Visitor::visitDescribe_table(SQLParser::Describe_tableContext *context)
         }
         return {};
     }
-    std::cout << "@TABLE DOESN'T EXIST" << std::endl;
+    std::cout << "@TABLE DOESN'T EXIST";
     return {};
 }
 

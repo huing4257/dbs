@@ -18,7 +18,7 @@ int main(int argc, char *argv[]) {
             return 0;
         }
     }
-//    init_dir();
+    init_dir();
     // main loop
     while (true) {
         std::string line;
