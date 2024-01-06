@@ -81,10 +81,62 @@ std::any Visitor::visitCreate_table(SQLParser::Create_tableContext *context) {
     auto field_list = context->field_list()->accept(this);
     Table table;
     table.name = table_name;
-    table.fields = std::any_cast<std::vector<Field>>(field_list);
+    table.fields.clear();
+    for (auto &field: context->field_list()->field()) {
+        auto new_field = std::any_cast<Field>(field->accept(this));
+        table.fields.push_back(new_field);
+    }
     current_db->create_open_table(table);
     return {};
 }
+
+std::any Visitor::visitNormal_field(SQLParser::Normal_fieldContext *context) {
+    Field field;
+    field.name = context->Identifier()->getText();
+    auto type = context->type_()->getStart()->getText();
+    if (type == "INT") {
+        field.type = FieldType::INT;
+    } else if (type == "VARCHAR") {
+        field.type = FieldType::VARCHAR;
+        auto value = context->type_()->children[2]->getText();
+        field.length = std::stoi(value);
+    } else if (type == "FLOAT") {
+        field.type = FieldType::FLOAT;
+    } else {
+        field.type = FieldType::INT;
+    }
+    if (context->Null()) {
+        field.allow_null = false;
+    }
+    return field;
+}
+
+std::any Visitor::visitPrimary_key_field(SQLParser::Primary_key_fieldContext *context) {
+    Field field;
+    auto id = context->Identifier();
+    if (id) {
+        field.name = id->getText();
+    } else {
+        field.name = "";
+        for (auto &name: context->identifiers()->Identifier()) {
+            field.name += name->getText();
+            field.name += "_";
+        }
+        field.name.pop_back();
+    }
+    field.is_primary_key = true;
+    field.type = FieldType::INT;
+    return field;
+}
+
+std::any Visitor::visitForeign_key_field(SQLParser::Foreign_key_fieldContext *context) {
+    Field field;
+    field.name = context->Identifier(0)->getText();
+    field.is_foreign_key = true;
+    field.type = FieldType::INT;
+    return field;
+}
+
 
 std::any Visitor::visitDrop_table(SQLParser::Drop_tableContext *context) {
     std::string table_name = context->Identifier()->getText();
@@ -141,57 +193,3 @@ std::any Visitor::visitDescribe_table(SQLParser::Describe_tableContext *context)
     return {};
 }
 
-std::any Visitor::visitField_list(SQLParser::Field_listContext *context) {
-    std::vector<Field> field_list;
-    for (auto &field: context->field()) {
-        field_list.push_back(std::any_cast<Field>(field->accept(this)));
-    }
-    return field_list;
-}
-
-std::any Visitor::visitNormal_field(SQLParser::Normal_fieldContext *context) {
-    Field field;
-    field.name = context->Identifier()->getText();
-    auto type = context->type_()->getStart()->getText();
-    if (type == "INT") {
-        field.type = FieldType::INT;
-    } else if (type == "VARCHAR") {
-        field.type = FieldType::VARCHAR;
-        auto value = context->type_()->children[2]->getText();
-        field.length = std::stoi(value);
-    } else if (type == "FLOAT") {
-        field.type = FieldType::FLOAT;
-    } else {
-        field.type = FieldType::INT;
-    }
-    if (context->Null()) {
-        field.allow_null = false;
-    }
-    return field;
-}
-
-std::any Visitor::visitPrimary_key_field(SQLParser::Primary_key_fieldContext *context) {
-    Field field;
-    auto id = context->Identifier();
-    if (id) {
-        field.name = id->getText();
-    } else {
-        field.name = "";
-        for (auto &name: context->identifiers()->Identifier()) {
-            field.name += name->getText();
-            field.name += "_";
-        }
-        field.name.pop_back();
-    }
-    field.is_primary_key = true;
-    field.type = FieldType::INT;
-    return field;
-}
-
-std::any Visitor::visitForeign_key_field(SQLParser::Foreign_key_fieldContext *context) {
-    Field field;
-    field.name = context->Identifier(0)->getText();
-    field.is_foreign_key = true;
-    field.type = FieldType::INT;
-    return field;
-}

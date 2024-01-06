@@ -35,7 +35,7 @@ class Visitor: public SQLVisitor {
     std::any visitAlter_table_add_pk(SQLParser::Alter_table_add_pkContext *context) override { return {}; }
     std::any visitAlter_table_add_foreign_key(SQLParser::Alter_table_add_foreign_keyContext *context) override { return {}; }
     std::any visitAlter_table_add_unique(SQLParser::Alter_table_add_uniqueContext *context) override { return {}; }
-    std::any visitField_list(SQLParser::Field_listContext *context) override;
+    std::any visitField_list(SQLParser::Field_listContext *context) override { return {}; }
     std::any visitNormal_field(SQLParser::Normal_fieldContext *context) override;
     std::any visitPrimary_key_field(SQLParser::Primary_key_fieldContext *context) override;
     std::any visitForeign_key_field(SQLParser::Foreign_key_fieldContext *context) override;

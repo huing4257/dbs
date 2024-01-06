@@ -18,7 +18,6 @@ enum class FieldType {
 
 class Field {
 public:
-    // TODO: add default value
     std::string name;
     FieldType type;
     int length = 0;
@@ -26,6 +25,8 @@ public:
     bool is_foreign_key = false;
     bool allow_null = true;
     std::any default_value;
+    // for primary key and foreign key
+    std::vector<Field*> key_fields;
 //    std::string foreign_key_table;
 //    std::string foreign_key_field;
 };
