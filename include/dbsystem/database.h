@@ -10,13 +10,14 @@
 #include <utility>
 #include <vector>
 
+class Database;
+extern Database *current_db;
+
 enum class FieldType {
     INT,
     VARCHAR,
     FLOAT
 };
-
-class Field;
 
 class Field {
 public:
@@ -43,7 +44,10 @@ public:
 
 class Table {
 private:
+    void record_to_buf(const std::vector<std::any> &record, unsigned int *buf) const;
+    std::vector<std::any> buf_to_record(const unsigned int *buf) const;
     std::vector<int> primary_key_index;
+    int record_length = 0;
 public:
     std::string name;
     int fileID = -1;
@@ -53,6 +57,8 @@ public:
     void write_file() const;
     void read_file();
     bool construct();
+    std::vector<std::any> get_record(int offset) const;
+    bool add_record(const std::vector<std::any> &record);
 };
 
 class Database {

@@ -8,7 +8,6 @@
 #include "dbsystem/database.h"
 #include "SQLVisitor.h"
 
-extern Database *current_db;
 
 class Visitor: public SQLVisitor {
     std::any visitProgram(SQLParser::ProgramContext *context) override;
