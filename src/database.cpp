@@ -6,6 +6,8 @@
 #include "filesystem/bufmanager/BufPageManager.h"
 #include "filesystem/fileio/FileManager.h"
 #include <algorithm>
+#include <cstring>
+
 auto fm = std::make_unique<FileManager>();
 auto bpm = std::make_unique<BufPageManager>(fm.get());
 
