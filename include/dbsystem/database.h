@@ -16,35 +16,50 @@ enum class FieldType {
     FLOAT
 };
 
+class Field;
+
 class Field {
 public:
     std::string name;
     FieldType type;
     int length = 0;
-    bool is_primary_key = false;
-    bool is_foreign_key = false;
     bool allow_null = true;
     std::any default_value;
-    // for primary key and foreign key
-    std::vector<Field*> key_fields;
-//    std::string foreign_key_table;
-//    std::string foreign_key_field;
+};
+
+class PrimaryKey {
+public:
+    std::string name;
+    std::vector<std::string> keys;
+};
+
+class ForeignKey {
+public:
+    std::string name;
+    std::vector<std::string> keys;
+    std::string table_name;
+    std::vector<std::string> ref_keys;
 };
 
 class Table {
+private:
+    std::vector<int> primary_key_index;
 public:
     std::string name;
     int fileID = -1;
     std::vector<Field> fields;
+    PrimaryKey primary_key;
+    ForeignKey foreign_key;
     void write_file() const;
     void read_file();
+    bool construct();
 };
 
 class Database {
 public:
     std::string name;
     std::vector<Table> tables;
-    explicit Database(std::string name): name(std::move(name)) {
+    explicit Database(std::string name) : name(std::move(name)) {
         tables = std::vector<Table>();
     }
     void use_database();

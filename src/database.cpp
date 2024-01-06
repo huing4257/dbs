@@ -82,12 +82,6 @@ void Table::write_file() const {
         // length
         buf[offset] = field.length;
         offset += 1;
-        // is_primary_key
-        buf[offset] = field.is_primary_key;
-        offset += 1;
-        // is_foreign_key
-        buf[offset] = field.is_foreign_key;
-        offset += 1;
         // allow_null
         buf[offset] = field.allow_null;
         offset += 1;
@@ -150,12 +144,6 @@ void Table::read_file() {
         // length
         field.length = buf[offset];
         offset += 1;
-        // is_primary_key
-        field.is_primary_key = buf[offset];
-        offset += 1;
-        // is_foreign_key
-        field.is_foreign_key = buf[offset];
-        offset += 1;
         // allow_null
         field.allow_null = buf[offset];
         offset += 1;
@@ -190,5 +178,19 @@ void Table::read_file() {
             offset += 1;
         }
         fields.push_back(field);
+    }
+}
+bool Table::construct() {
+    for (auto &key: primary_key.keys) {
+        auto field = std::find_if(fields.begin(), fields.end(), [&key](const Field &field) {
+            return field.name == key;
+        });
+        if (field == fields.end()) {
+            std::cout << "!ERROR " << key << " DOESN'T EXIST" << std::endl;
+            return false;
+        }
+        int index = (int)(field - fields.begin());
+        primary_key_index.push_back(index);
+        fields[index].allow_null = false;
     }
 }

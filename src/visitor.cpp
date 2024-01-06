@@ -51,6 +51,9 @@ std::any Visitor::visitShow_dbs(SQLParser::Show_dbsContext *context) {
 
 std::any Visitor::visitUse_db(SQLParser::Use_dbContext *context) {
     std::string db_name = context->Identifier()->getText();
+    if (current_db != nullptr) {
+        current_db->close_database();
+    }
     for (auto &db: databases) {
         if (db.name == db_name) {
             db.use_database();
@@ -83,9 +86,20 @@ std::any Visitor::visitCreate_table(SQLParser::Create_tableContext *context) {
     table.name = table_name;
     table.fields.clear();
     for (auto &field: context->field_list()->field()) {
+        if (typeid(*field) == typeid(SQLParser::Primary_key_fieldContext)) {
+            auto new_field = std::any_cast<PrimaryKey>(field->accept(this));
+            table.primary_key = new_field;
+            continue;
+        }
+        if (typeid(*field) == typeid(SQLParser::Foreign_key_fieldContext)) {
+            auto new_field = std::any_cast<ForeignKey>(field->accept(this));
+            table.foreign_key = new_field;
+            continue;
+        }
         auto new_field = std::any_cast<Field>(field->accept(this));
         table.fields.push_back(new_field);
     }
+    table.construct();
     current_db->create_open_table(table);
     return {};
 }
@@ -112,29 +126,35 @@ std::any Visitor::visitNormal_field(SQLParser::Normal_fieldContext *context) {
 }
 
 std::any Visitor::visitPrimary_key_field(SQLParser::Primary_key_fieldContext *context) {
-    Field field;
+    PrimaryKey primary_key;
     auto id = context->Identifier();
     if (id) {
-        field.name = id->getText();
-    } else {
-        field.name = "";
-        for (auto &name: context->identifiers()->Identifier()) {
-            field.name += name->getText();
-            field.name += "_";
-        }
-        field.name.pop_back();
+        primary_key.name = id->getText();
     }
-    field.is_primary_key = true;
-    field.type = FieldType::INT;
-    return field;
+    auto ids = context->identifiers()->Identifier();
+    for (auto &name: ids) {
+        primary_key.keys.push_back(name->getText());
+    }
+    return primary_key;
 }
 
 std::any Visitor::visitForeign_key_field(SQLParser::Foreign_key_fieldContext *context) {
-    Field field;
-    field.name = context->Identifier(0)->getText();
-    field.is_foreign_key = true;
-    field.type = FieldType::INT;
-    return field;
+    ForeignKey foreign_key;
+    auto id = context->Identifier();
+    if (id.size() == 1) {
+        foreign_key.name = "";
+        foreign_key.table_name = id[0]->getText();
+    } else {
+        foreign_key.name = id[0]->getText();
+        foreign_key.table_name = id[1]->getText();
+    }
+    auto ids = context->identifiers();
+    int key_num = (int)ids.size()/2;
+    for (int i = 0; i < key_num; ++i) {
+        foreign_key.keys.push_back(ids[2*i]->getText());
+        foreign_key.ref_keys.push_back(ids[2*i+1]->getText());
+    }
+    return foreign_key;
 }
 
 
@@ -146,20 +166,10 @@ std::any Visitor::visitDrop_table(SQLParser::Drop_tableContext *context) {
 
 std::any Visitor::visitDescribe_table(SQLParser::Describe_tableContext *context) {
     std::string table_name = context->Identifier()->getText();
-    // record primary key
-    Field* primary_key = nullptr;
-    // record foreign key
-    std::vector<Field*> foreign_keys;
     for (auto &table: current_db->tables) {
         if (table.name == table_name) {
             cout << "Field,Type,Null,Default" << endl;
             for (auto &field: table.fields) {
-                if (field.is_primary_key) {
-                    primary_key = &field;
-                }
-                if (field.is_foreign_key) {
-                    foreign_keys.push_back(&field);
-                }
                 cout << field.name << ",";
                 switch (field.type) {
                     case FieldType::INT:
@@ -176,15 +186,40 @@ std::any Visitor::visitDescribe_table(SQLParser::Describe_tableContext *context)
                 cout << (field.default_value.has_value() ? " " : "NULL") << endl;
             }
             cout << endl;
-            if (primary_key != nullptr) {
-                cout << "PRIMARY KEY (" << primary_key->name << ")" << endl;
-            }
-            if (!foreign_keys.empty()) {
-                cout << "FOREIGN KEY (";
-                for (auto &field: foreign_keys) {
-                    cout << field->name << ",";
+            if (!table.primary_key.keys.empty()) {
+                cout << "PRIMARY KEY ";
+                if (!table.primary_key.name.empty()) {
+                    cout << table.primary_key.name;
                 }
-                cout << ")" << endl;
+                cout << "(";
+                string tmp;
+                for (auto &key: table.primary_key.keys) {
+                    tmp += (key + ",");
+                }
+                tmp.pop_back();
+                cout << tmp;
+                cout << ");" << endl;
+            }
+            if (!table.foreign_key.keys.empty()) {
+                cout << "FOREIGN KEY ";
+                if (!table.foreign_key.name.empty()) {
+                    cout << table.foreign_key.name;
+                }
+                cout << "(";
+                string tmp;
+                for (auto &key: table.foreign_key.keys) {
+                    tmp += (key + ",");
+                }
+                tmp.pop_back();
+                cout << tmp;
+                cout << ") REFERENCES " << table.foreign_key.table_name << "(";
+                tmp = "";
+                for (auto &key: table.foreign_key.ref_keys) {
+                    tmp += (key + ",");
+                }
+                tmp.pop_back();
+                cout << tmp;
+                cout << ");" << endl;
             }
             return {};
         }

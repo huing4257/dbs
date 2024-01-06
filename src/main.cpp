@@ -19,6 +19,7 @@ int main(int argc, char *argv[]) {
         }
     }
     // init database
+//    init_dir();
     init_database();
     // main loop
     while (true) {
