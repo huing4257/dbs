@@ -193,4 +193,5 @@ bool Table::construct() {
         primary_key_index.push_back(index);
         fields[index].allow_null = false;
     }
+    return true;
 }

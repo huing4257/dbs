@@ -49,7 +49,7 @@ public:
     int fileID = -1;
     std::vector<Field> fields;
     PrimaryKey primary_key;
-    ForeignKey foreign_key;
+    std::vector<ForeignKey> foreign_keys;
     void write_file() const;
     void read_file();
     bool construct();

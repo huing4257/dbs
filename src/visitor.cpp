@@ -93,7 +93,7 @@ std::any Visitor::visitCreate_table(SQLParser::Create_tableContext *context) {
         }
         if (typeid(*field) == typeid(SQLParser::Foreign_key_fieldContext)) {
             auto new_field = std::any_cast<ForeignKey>(field->accept(this));
-            table.foreign_key = new_field;
+            table.foreign_keys.push_back(new_field);
             continue;
         }
         auto new_field = std::any_cast<Field>(field->accept(this));
@@ -200,26 +200,28 @@ std::any Visitor::visitDescribe_table(SQLParser::Describe_tableContext *context)
                 cout << tmp;
                 cout << ");" << endl;
             }
-            if (!table.foreign_key.keys.empty()) {
-                cout << "FOREIGN KEY ";
-                if (!table.foreign_key.name.empty()) {
-                    cout << table.foreign_key.name;
+            if (!table.foreign_keys.empty()) {
+                for (auto &foreign_key: table.foreign_keys) {
+                    cout << "FOREIGN KEY ";
+                    if (!foreign_key.name.empty()) {
+                        cout << foreign_key.name;
+                    }
+                    cout << "(";
+                    string tmp;
+                    for (auto &key: foreign_key.keys) {
+                        tmp += (key + ",");
+                    }
+                    tmp.pop_back();
+                    cout << tmp;
+                    cout << ") REFERENCES " << foreign_key.table_name << "(";
+                    tmp = "";
+                    for (auto &key: foreign_key.ref_keys) {
+                        tmp += (key + ",");
+                    }
+                    tmp.pop_back();
+                    cout << tmp;
+                    cout << ");" << endl;
                 }
-                cout << "(";
-                string tmp;
-                for (auto &key: table.foreign_key.keys) {
-                    tmp += (key + ",");
-                }
-                tmp.pop_back();
-                cout << tmp;
-                cout << ") REFERENCES " << table.foreign_key.table_name << "(";
-                tmp = "";
-                for (auto &key: table.foreign_key.ref_keys) {
-                    tmp += (key + ",");
-                }
-                tmp.pop_back();
-                cout << tmp;
-                cout << ");" << endl;
             }
             return {};
         }
