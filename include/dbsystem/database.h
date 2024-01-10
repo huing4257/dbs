@@ -9,6 +9,7 @@
 #include <utility>
 #include <vector>
 #include <variant>
+#include <optional>
 
 class Database;
 extern Database *current_db;
@@ -64,8 +65,13 @@ public:
     void write_file() const;
     void read_file();
     bool construct();
+
     std::vector<Value> get_record(int offset) const;
     bool add_record(const std::vector<Value> &record);
+
+    std::vector<Value> str_to_record(const std::vector<std::string> &line) const;
+    std::vector<std::string> record_to_str(const std::vector<Value> &record) const;
+
     Table() = default;
     Table(const Table &table) {
         name = table.name;
@@ -91,6 +97,15 @@ public:
     void close_database();
     void create_open_table(Table &table);
     void drop_table(const std::string &table_name);
+    int get_table_index(const std::string &table_name) const{
+        for (int i = 0; i < tables.size(); i++) {
+            if (tables[i].name == table_name) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
     ~Database() {
         close_database();
     }

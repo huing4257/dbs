@@ -2,6 +2,8 @@
 // Created by 胡 on 2023/12/30.
 //
 #include "parser/visitor.h"
+#include "utils/error.h"
+#include "utils/output.h"
 #include <filesystem>
 
 using namespace std;
@@ -20,7 +22,7 @@ std::any Visitor::visitCreate_db(SQLParser::Create_dbContext *context) {
     try {
         filesystem::create_directory("data/base/" + db_name);
     } catch (std::exception &e) {
-        std::cout << "@DB ALREADY EXISTS" << std::endl;
+        throw std::runtime_error("DB ALREADY EXISTS");
     }
     databases.emplace_back(db_name);
 
@@ -36,15 +38,15 @@ std::any Visitor::visitDrop_db(SQLParser::Drop_dbContext *context) {
                         }),
                         databases.end());
     } catch (std::exception &e) {
-        std::cout << "@DB DOESN'T EXIST" << e.what();
+        throw Error("DB DOESN'T EXIST");
     }
     return visitChildren(context);
 }
 
 std::any Visitor::visitShow_dbs(SQLParser::Show_dbsContext *context) {
-    cout << "DATABASES" << endl;
+    output_sys.output({{"DATABASES"}});
     for (auto &db: databases) {
-        cout << db.name << endl;
+        output_sys.output({{db.name}});
     }
     return visitChildren(context);
 }
@@ -61,14 +63,16 @@ std::any Visitor::visitUse_db(SQLParser::Use_dbContext *context) {
             return {};
         }
     }
-    std::cout << "@DB DOESN'T EXIST" << std::endl;
-    return visitChildren(context);
+    throw Error("DB DOESN'T EXIST");
 }
 
 std::any Visitor::visitShow_tables(SQLParser::Show_tablesContext *context) {
-    cout << "TABLES" << endl;
+    if (current_db == nullptr) {
+        throw Error("NO DATABASE SELECTED");
+    }
+    output_sys.output({{"TABLES"}});
     for (auto &table: current_db->tables) {
-        cout << table.name << endl;
+        output_sys.output({{table.name}});
     }
     return visitChildren(context);
 }
@@ -77,8 +81,7 @@ std::any Visitor::visitCreate_table(SQLParser::Create_tableContext *context) {
     std::string table_name = context->Identifier()->getText();
     for (auto &table: current_db->tables) {
         if (table.name == table_name) {
-            std::cout << "@TABLE ALREADY EXISTS";
-            return {};
+            throw Error("TABLE ALREADY EXISTS");
         }
     }
     auto field_list = context->field_list()->accept(this);
@@ -149,10 +152,10 @@ std::any Visitor::visitForeign_key_field(SQLParser::Foreign_key_fieldContext *co
         foreign_key.table_name = id[1]->getText();
     }
     auto ids = context->identifiers();
-    int key_num = (int)ids.size()/2;
+    int key_num = (int) ids.size() / 2;
     for (int i = 0; i < key_num; ++i) {
-        foreign_key.keys.push_back(ids[2*i]->getText());
-        foreign_key.ref_keys.push_back(ids[2*i+1]->getText());
+        foreign_key.keys.push_back(ids[2 * i]->getText());
+        foreign_key.ref_keys.push_back(ids[2 * i + 1]->getText());
     }
     return foreign_key;
 }
@@ -166,72 +169,88 @@ std::any Visitor::visitDrop_table(SQLParser::Drop_tableContext *context) {
 
 std::any Visitor::visitDescribe_table(SQLParser::Describe_tableContext *context) {
     std::string table_name = context->Identifier()->getText();
-    for (auto &table: current_db->tables) {
-        if (table.name == table_name) {
-            cout << "Field,Type,Null,Default" << endl;
-            for (auto &field: table.fields) {
-                cout << field.name << ",";
-                switch (field.type) {
-                    case FieldType::INT:
-                        cout << "INT,";
-                        break;
-                    case FieldType::VARCHAR:
-                        cout << "VARCHAR(" << field.length << "),";
-                        break;
-                    case FieldType::FLOAT:
-                        cout << "FLOAT,";
-                        break;
-                }
-                cout << (field.allow_null ? "YES" : "NO") << ",";
-                cout << (field.default_value.has_value() ? " " : "NULL") << endl;
+    auto table_index = current_db->get_table_index(table_name);
+    if (table_index == -1) {
+        throw Error("TABLE DOESN'T EXIST");
+    }
+    auto &table = current_db->tables[table_index];
+
+    output_sys.output({{"Field", "Type", "Null", "Default"}});
+    for (auto &field: table.fields) {
+        std::vector<std::string> record;
+        record.push_back(field.name);
+        switch (field.type) {
+            case FieldType::INT:
+                record.emplace_back("INT");
+                break;
+            case FieldType::FLOAT:
+                record.emplace_back("FLOAT");
+                break;
+            case FieldType::VARCHAR:
+                record.push_back("VARCHAR(" + std::to_string(field.length) + ")");
+                break;
+        }
+        record.emplace_back(field.allow_null ? "YES" : "NO");
+        record.emplace_back(field.default_value ? "YES" : "NULL");
+        output_sys.output({record});
+    }
+    string line = "\n";
+    if (!table.primary_key.keys.empty()) {
+        line += "PRIMARY KEY ";
+        if (!table.primary_key.name.empty()) {
+            line += table.primary_key.name;
+        }
+        line += "(";
+        for (auto &key: table.primary_key.keys) {
+            line += (key + ",");
+        }
+        line.pop_back();
+        line += ");";
+    }
+    line += "\n\n";
+    if (!table.foreign_keys.empty()) {
+        for (auto &foreign_key: table.foreign_keys) {
+            line += "FOREIGN KEY ";
+            if (!foreign_key.name.empty()) {
+                line += foreign_key.name;
             }
-            cout << endl;
-            if (!table.primary_key.keys.empty()) {
-                cout << "PRIMARY KEY ";
-                if (!table.primary_key.name.empty()) {
-                    cout << table.primary_key.name;
-                }
-                cout << "(";
-                string tmp;
-                for (auto &key: table.primary_key.keys) {
-                    tmp += (key + ",");
-                }
-                tmp.pop_back();
-                cout << tmp;
-                cout << ");" << endl;
+            line += "(";
+            for (auto &key: foreign_key.keys) {
+                line += (key + ",");
             }
-            if (!table.foreign_keys.empty()) {
-                for (auto &foreign_key: table.foreign_keys) {
-                    cout << "FOREIGN KEY ";
-                    if (!foreign_key.name.empty()) {
-                        cout << foreign_key.name;
-                    }
-                    cout << "(";
-                    string tmp;
-                    for (auto &key: foreign_key.keys) {
-                        tmp += (key + ",");
-                    }
-                    tmp.pop_back();
-                    cout << tmp;
-                    cout << ") REFERENCES " << foreign_key.table_name << "(";
-                    tmp = "";
-                    for (auto &key: foreign_key.ref_keys) {
-                        tmp += (key + ",");
-                    }
-                    tmp.pop_back();
-                    cout << tmp;
-                    cout << ");" << endl;
-                }
+            line.pop_back();
+            line +=  ") REFERENCES " + foreign_key.table_name + "(";
+            for (auto &key: foreign_key.ref_keys) {
+                line += (key + ",");
             }
-            return {};
+            line.pop_back();
+            line += ");\n";
         }
     }
-    std::cout << "@TABLE DOESN'T EXIST";
+    output_sys.output({{line}});
     return {};
 }
 std::any Visitor::visitLoad_table(SQLParser::Load_tableContext *context) {
     auto table_name = context->Identifier()->getText();
+    //    auto &table = current_db->get_table(table_name);
     auto file_name = context->String()[0]->getText();
-    auto terminator = context->String()[1]->getText();
-    return std::any();
+    auto terminator = context->String()[1]->getText()[0];
+    ifstream file(file_name);
+    if (!file.is_open()) throw std::runtime_error("FILE NOT FOUND");
+    // decide whether to alloc new page
+    int count = 0;
+    string line;
+    vector<vector<Value>> records;
+    while (getline(file, line)) {
+        string tmp;
+        stringstream ss(line);
+        vector<string> str_record;
+        while (getline(ss, tmp, terminator)) {
+            str_record.push_back(tmp);
+        }
+
+
+        count++;
+    }
+    return {};
 }

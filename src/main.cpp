@@ -1,13 +1,16 @@
-#include <iostream>
-#include <cstdio>
 #include "antlr4-runtime.h"
-#include <sys/stat.h>
 #include "dbsystem/init.h"
 #include "parser/SQLLexer.h"
 #include "parser/visitor.h"
+#include "utils/error.h"
+#include <cstdio>
 #include <filesystem>
+#include <iostream>
+#include <sys/stat.h>
+#include "utils/output.h"
 
 using namespace std;
+Output output_sys = Output(OutputType::BATCH);
 
 int main(int argc, char *argv[]) {
     // create directory structure
@@ -38,7 +41,11 @@ int main(int argc, char *argv[]) {
         }
 //        cerr << tree->toStringTree(&parser) << endl;
         auto visitor = Visitor();
-        visitor.visit(tree);
+        try {
+            visitor.visit(tree);
+        } catch (const Error &e) {
+            cout << "!ERROR" << e.what() << endl;
+        }
         if (current_db != nullptr) {
             cout << "@" << "DB:" << current_db->name << " ";
         }

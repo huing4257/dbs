@@ -5,6 +5,7 @@
 #include "dbsystem/database.h"
 #include "filesystem/bufmanager/BufPageManager.h"
 #include "filesystem/fileio/FileManager.h"
+#include "utils/error.h"
 #include <algorithm>
 #include <cstring>
 
@@ -54,7 +55,7 @@ void Database::drop_table(const string &table_name) {
         std::filesystem::remove("data/base/" + name + "/" + table_name);
         tables.erase(it, tables.end());
     } else {
-        std::cout << "@TABLE DOESN'T EXIST" << std::endl;
+        throw Error("TABLE DOESN'T EXIST");
     }
 }
 void Table::write_file() const {
@@ -203,7 +204,7 @@ bool Table::construct() {
             return field.name == key;
         });
         if (field == fields.end()) {
-            std::cout << "!ERROR " << key << " DOESN'T EXIST" << std::endl;
+            throw Error("PRIMARY KEY DOESN'T EXIST");
             return false;
         }
         int index = (int) (field - fields.begin());

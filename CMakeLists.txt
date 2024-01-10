@@ -32,7 +32,10 @@ set(SOURCES_STAGE
         include/parser/SQLParser.cpp
         src/visitor.cpp
         src/database.cpp
-        )
+        include/utils/error.h
+        src/output.cpp
+        include/utils/output.h
+)
 
 add_executable(${PROJECT_NAME} ${SOURCES_STAGE})
 
