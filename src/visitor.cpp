@@ -229,4 +229,9 @@ std::any Visitor::visitDescribe_table(SQLParser::Describe_tableContext *context)
     std::cout << "@TABLE DOESN'T EXIST";
     return {};
 }
-
+std::any Visitor::visitLoad_table(SQLParser::Load_tableContext *context) {
+    auto table_name = context->Identifier()->getText();
+    auto file_name = context->String()[0]->getText();
+    auto terminator = context->String()[1]->getText();
+    return std::any();
+}

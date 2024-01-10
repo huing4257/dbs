@@ -45,22 +45,21 @@ void Database::create_open_table(Table &table) {
 }
 
 void Database::drop_table(const string &table_name) {
-    for (auto &table: tables) {
-        if (table.name == table_name) {
-            fm->closeFile(table.fileID);
-            std::filesystem::remove("data/base/" + name + "/" + table_name);
-            tables.erase(std::remove_if(tables.begin(), tables.end(), [&table_name](Table &table) {
-                             return table.name == table_name;
-                         }),
-                         tables.end());
-            return;
-        }
+    auto it = std::remove_if(tables.begin(), tables.end(), [&table_name](const Table &table) {
+        return table.name == table_name;
+    });
+
+    if (it != tables.end()) {
+        fm->closeFile(it->fileID);
+        std::filesystem::remove("data/base/" + name + "/" + table_name);
+        tables.erase(it, tables.end());
+    } else {
+        std::cout << "@TABLE DOESN'T EXIST" << std::endl;
     }
-    std::cout << "@TABLE DOESN'T EXIST" << std::endl;
 }
 void Table::write_file() const {
     int index;
-    int offset = 0;
+    unsigned int offset = 0;
     // buf using 4 bytes as a unit
     BufType buf = bpm->allocPage(fileID, 0, index, false);
     // name
@@ -88,24 +87,24 @@ void Table::write_file() const {
         buf[offset] = field.allow_null;
         offset += 1;
         // default_value
-        if (field.default_value.has_value()) {
+        if (field.default_value) {
             buf[offset] = 1;
             offset += 1;
             switch (field.type) {
                 case FieldType::INT: {
-                    auto value = std::any_cast<int>(field.default_value);
+                    int value = std::get<int>(field.default_value.value());
                     memcpy(buf + offset, &value, sizeof(int));
                     offset += sizeof(int);
                     break;
                 }
                 case FieldType::FLOAT: {
-                    auto value = std::any_cast<float>(field.default_value);
+                    float value = std::get<float>(field.default_value.value());
                     memcpy(buf + offset, &value, sizeof(float));
                     offset += sizeof(float);
                     break;
                 }
                 case FieldType::VARCHAR: {
-                    auto value = std::any_cast<std::string>(field.default_value);
+                    auto value = std::get<std::string>(field.default_value.value());
                     auto value_length = (unsigned int) (value.size());
                     memcpy(buf + offset, &value_length, sizeof(unsigned int));
                     offset += sizeof(unsigned int);
@@ -198,6 +197,7 @@ bool Table::construct() {
         }
     }
     record_length = (record_length + 3) / 4 * 4;
+    record_num_per_page = (PAGE_SIZE - 4) / record_length;
     for (auto &key: primary_key.keys) {
         auto field = std::find_if(fields.begin(), fields.end(), [&key](const Field &field) {
             return field.name == key;
@@ -213,36 +213,36 @@ bool Table::construct() {
     //todo: check foreign key
     return true;
 }
-void Table::record_to_buf(const vector<std::any> &record, unsigned int *buf) const {
+
+void Table::record_to_buf(const vector<Value> &record, unsigned int *buf) const {
     int offset = 0;
     for (int i = 0; i < fields.size(); ++i) {
         switch (fields[i].type) {
             case FieldType::INT: {
-                auto value = std::any_cast<int>(record[i]);
+                auto value = std::get<int>(record[i]);
                 memcpy(buf + offset, &value, sizeof(int));
                 offset += sizeof(int);
                 break;
             }
             case FieldType::FLOAT: {
-                auto value = std::any_cast<float>(record[i]);
+                auto value = std::get<float>(record[i]);
                 memcpy(buf + offset, &value, sizeof(float));
                 offset += sizeof(float);
                 break;
             }
             case FieldType::VARCHAR: {
-                auto value = std::any_cast<std::string>(record[i]);
+                auto value = std::get<std::string>(record[i]);
                 memcpy(buf + offset, value.c_str(), value.size());
-                offset += (int)value.size();
+                offset += (int) value.size();
                 break;
             }
         }
     }
 }
-
-std::vector<std::any> Table::buf_to_record(const unsigned int *buf) const {
+std::vector<Value> Table::buf_to_record(const unsigned int *buf) const {
     int offset = 0;
-    std::vector<std::any> record;
-    for (const auto & field : fields) {
+    std::vector<Value> record;
+    for (const auto &field: fields) {
         switch (field.type) {
             case FieldType::INT: {
                 int value;
@@ -262,11 +262,15 @@ std::vector<std::any> Table::buf_to_record(const unsigned int *buf) const {
                 // use length to store varchar
                 unsigned int value_length = field.length;
                 string value((char *) (buf + offset), value_length);
-                offset += (int)value_length;
+                offset += (int) value_length;
                 record.emplace_back(value);
                 break;
             }
         }
     }
     return record;
+}
+
+std::vector<Value> Table::get_record(int offset) const {
+    return std::vector<Value>();
 }

@@ -4,11 +4,11 @@
 
 #ifndef DBS_DATABASE_H
 #define DBS_DATABASE_H
-#include <any>
 #include <filesystem>
 #include <string>
 #include <utility>
 #include <vector>
+#include <variant>
 
 class Database;
 extern Database *current_db;
@@ -19,13 +19,15 @@ enum class FieldType {
     FLOAT
 };
 
+using Value = std::variant<int, float, std::string>;
+
 class Field {
 public:
     std::string name;
     FieldType type;
     int length = 0;
     bool allow_null = true;
-    std::any default_value;
+    std::optional<Value> default_value;
 };
 
 class PrimaryKey {
@@ -44,10 +46,15 @@ public:
 
 class Table {
 private:
-    void record_to_buf(const std::vector<std::any> &record, unsigned int *buf) const;
-    std::vector<std::any> buf_to_record(const unsigned int *buf) const;
     std::vector<int> primary_key_index;
     int record_length = 0;
+    int record_num_per_page = 0;
+    int record_num = 0;
+    // use bitmap to record which place is empty
+    static const int PAGE_HEADER = 64;
+
+    void record_to_buf(const std::vector<Value> &record, unsigned int *buf) const;
+    std::vector<Value> buf_to_record(const unsigned int *buf) const;
 public:
     std::string name;
     int fileID = -1;
@@ -57,8 +64,20 @@ public:
     void write_file() const;
     void read_file();
     bool construct();
-    std::vector<std::any> get_record(int offset) const;
-    bool add_record(const std::vector<std::any> &record);
+    std::vector<Value> get_record(int offset) const;
+    bool add_record(const std::vector<Value> &record);
+    Table() = default;
+    Table(const Table &table) {
+        name = table.name;
+        fileID = table.fileID;
+        fields = table.fields;
+        primary_key = table.primary_key;
+        foreign_keys = table.foreign_keys;
+        primary_key_index = table.primary_key_index;
+        record_length = table.record_length;
+        record_num_per_page = table.record_num_per_page;
+        record_num = table.record_num;
+    }
 };
 
 class Database {
