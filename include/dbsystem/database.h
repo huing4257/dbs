@@ -14,9 +14,9 @@ class Database;
 extern Database *current_db;
 
 enum class FieldType {
-    INT,
-    VARCHAR,
-    FLOAT
+    INT = 0,
+    FLOAT = 1,
+    VARCHAR = 2
 };
 
 using Value = std::variant<int, float, std::string>;

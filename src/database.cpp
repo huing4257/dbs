@@ -272,5 +272,30 @@ std::vector<Value> Table::buf_to_record(const unsigned int *buf) const {
 }
 
 std::vector<Value> Table::get_record(int offset) const {
-    return std::vector<Value>();
+    int index;
+    BufType buf = bpm->getPage(fileID, offset / record_num_per_page + 1, index);
+    buf = buf + (offset % record_num_per_page) * record_length + PAGE_HEADER;
+    return buf_to_record(buf);
+}
+
+bool Table::add_record(const vector<Value> &record) {
+    //    if (record.size() != fields.size()) {
+    //        std::cout << "!ERROR RECORD SIZE DOESN'T MATCH";
+    //        return false;
+    //    }
+    //    for (int i = 0; i < fields.size(); ++i) {
+    //        if (record[i].index() != (int)fields[i].type) {
+    //            std::cout << "!ERROR RECORD TYPE DOESN'T MATCH";
+    //            return false;
+    //        }
+    //    }
+    int index;
+    int page_id = (record_num + 1) / record_num_per_page + 1;
+    int offset = (record_num) % record_num_per_page;
+    BufType buf = bpm->getPage(fileID, page_id, index);
+    buf = buf + offset * record_length + PAGE_HEADER;
+    record_to_buf(record, buf);
+    bpm->markDirty(index);
+    record_num++;
+    return true;
 }
