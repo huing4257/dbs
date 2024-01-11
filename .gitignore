@@ -2,4 +2,9 @@
 .idea
 .DS_Store
 build/
-runtime/
+runtime*/
+mac*/
+test/
+test.sh
+testfile.txt
+test_data/
