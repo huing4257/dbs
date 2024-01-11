@@ -44,7 +44,7 @@ int main(int argc, char *argv[]) {
         try {
             visitor.visit(tree);
         } catch (const Error &e) {
-            cout << "!ERROR" << e.what() << endl;
+            cout << "!ERROR " << e.what() << endl;
         }
         if (current_db != nullptr) {
             cout << "@" << "DB:" << current_db->name << " ";

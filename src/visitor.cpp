@@ -230,27 +230,45 @@ std::any Visitor::visitDescribe_table(SQLParser::Describe_tableContext *context)
     output_sys.output({{line}});
     return {};
 }
+
 std::any Visitor::visitLoad_table(SQLParser::Load_tableContext *context) {
     auto table_name = context->Identifier()->getText();
-    //    auto &table = current_db->get_table(table_name);
+    int table_index = current_db->get_table_index(table_name);
     auto file_name = context->String()[0]->getText();
-    auto terminator = context->String()[1]->getText()[0];
-    ifstream file(file_name);
-    if (!file.is_open()) throw std::runtime_error("FILE NOT FOUND");
+    auto terminator = context->String()[1]->getText();
+    auto &table = current_db->tables[table_index];
+    ifstream file(file_name.substr(1, file_name.size() - 2));
+    if (!file.is_open()) throw Error("FILE NOT FOUND");
     // decide whether to alloc new page
-    int count = 0;
     string line;
-    vector<vector<Value>> records;
-    while (getline(file, line)) {
-        string tmp;
-        stringstream ss(line);
-        vector<string> str_record;
-        while (getline(ss, tmp, terminator)) {
-            str_record.push_back(tmp);
+    vector<vector<Value>> data(table.record_num_per_page);
+    int count = 0;
+    while (true) {
+        bool flag = false;
+        int i = 0;
+        for (; i < table.record_num_per_page; ++i) {
+            if (!getline(file, line)) {
+                flag = true;
+                break;
+            }
+            count++;
+            // split line
+            vector<string> record;
+            stringstream ss(line);
+            string token;
+            if (count == 58897){
+                int a = 1;
+            }
+            while (getline(ss, token, ',')) {
+                record.push_back(token);
+            }
+            data[i] = table.str_to_record(record);
         }
-
-
-        count++;
+        data.resize(i);
+        table.write_whole_page(data);
+        // problem
+        if (flag) break;
     }
+    output_sys.output({{"rows"},{to_string(count)}});
     return {};
 }

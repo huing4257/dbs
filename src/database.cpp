@@ -28,19 +28,22 @@ void Database::use_database() {
         table.name = entry.path().filename().string();
         fm->openFile(entry.path().string().c_str(), table.fileID);
         table.read_file();
+        table.construct();
         tables.push_back(table);
     }
 }
 
 void Database::close_database() {
     for (auto &table: tables) {
+        bpm->close();
         fm->closeFile(table.fileID);
     }
 }
+
 void Database::create_open_table(Table &table) {
     auto table_name = table.name;
-    fm->createFile(("data/base/" + name + "/" + table_name).c_str());
-    fm->openFile(("data/base/" + name + "/" + table_name).c_str(), table.fileID);
+    fm->createFile(("data/base/" + name + "/" + table_name + ".db").c_str());
+    fm->openFile(("data/base/" + name + "/" + table_name + ".db").c_str(), table.fileID);
     table.write_file();
     tables.push_back(table);
 }
@@ -52,7 +55,7 @@ void Database::drop_table(const string &table_name) {
 
     if (it != tables.end()) {
         fm->closeFile(it->fileID);
-        std::filesystem::remove("data/base/" + name + "/" + table_name);
+        std::filesystem::remove("data/base/" + name + "/" + table_name + ".db");
         tables.erase(it, tables.end());
     } else {
         throw Error("TABLE DOESN'T EXIST");
@@ -190,14 +193,15 @@ bool Table::construct() {
                 record_length += sizeof(int);
                 break;
             case FieldType::VARCHAR:
-                record_length += field.length;
+                record_length += (field.length + 3) / 4 * 4;
                 break;
             case FieldType::FLOAT:
                 record_length += sizeof(float);
                 break;
         }
     }
-    record_length = (record_length + 3) / 4 * 4;
+    // align to 32 bytes
+    record_length = (record_length + 31) / 32 * 32;
     record_num_per_page = (PAGE_SIZE - 4) / record_length;
     for (auto &key: primary_key.keys) {
         auto field = std::find_if(fields.begin(), fields.end(), [&key](const Field &field) {
@@ -222,19 +226,19 @@ void Table::record_to_buf(const vector<Value> &record, unsigned int *buf) const 
             case FieldType::INT: {
                 auto value = std::get<int>(record[i]);
                 memcpy(buf + offset, &value, sizeof(int));
-                offset += sizeof(int);
+                offset += sizeof(int) / 4;
                 break;
             }
             case FieldType::FLOAT: {
                 auto value = std::get<float>(record[i]);
                 memcpy(buf + offset, &value, sizeof(float));
-                offset += sizeof(float);
+                offset += sizeof(float) / 4;
                 break;
             }
             case FieldType::VARCHAR: {
                 auto value = std::get<std::string>(record[i]);
                 memcpy(buf + offset, value.c_str(), value.size());
-                offset += (int) value.size();
+                offset += (fields[i].length + 3) / 4;
                 break;
             }
         }
@@ -248,14 +252,14 @@ std::vector<Value> Table::buf_to_record(const unsigned int *buf) const {
             case FieldType::INT: {
                 int value;
                 memcpy(&value, buf + offset, sizeof(int));
-                offset += sizeof(int);
+                offset += sizeof(int) / 4;
                 record.emplace_back(value);
                 break;
             }
             case FieldType::FLOAT: {
                 float value;
                 memcpy(&value, buf + offset, sizeof(float));
-                offset += sizeof(float);
+                offset += sizeof(float) / 4;
                 record.emplace_back(value);
                 break;
             }
@@ -263,7 +267,7 @@ std::vector<Value> Table::buf_to_record(const unsigned int *buf) const {
                 // use length to store varchar
                 unsigned int value_length = field.length;
                 string value((char *) (buf + offset), value_length);
-                offset += (int) value_length;
+                offset += (int) ((value_length + 3) / 4);
                 record.emplace_back(value);
                 break;
             }
@@ -274,8 +278,9 @@ std::vector<Value> Table::buf_to_record(const unsigned int *buf) const {
 
 std::vector<Value> Table::get_record(int offset) const {
     int index;
-    BufType buf = bpm->getPage(fileID, offset / record_num_per_page + 1, index);
-    buf = buf + (offset % record_num_per_page) * record_length + PAGE_HEADER;
+    BufType buf = bpm->getPage(fileID, (offset-1) / record_num_per_page + 2, index);
+    int tmp = (offset % record_num_per_page) - 1;
+    buf = buf + tmp * record_length/4 + PAGE_HEADER/4;
     return buf_to_record(buf);
 }
 
@@ -299,4 +304,60 @@ bool Table::add_record(const vector<Value> &record) {
     bpm->markDirty(index);
     record_num++;
     return true;
+}
+
+vector<Value> Table::str_to_record(const std::vector<std::string> &strs) const {
+    std::vector<Value> record;
+    for (int i = 0; i < fields.size(); ++i) {
+        switch (fields[i].type) {
+            case FieldType::INT: {
+                record.emplace_back(std::stoi(strs[i]));
+                break;
+            }
+            case FieldType::FLOAT: {
+                record.emplace_back(std::stof(strs[i]));
+                break;
+            }
+            case FieldType::VARCHAR: {
+                record.emplace_back(strs[i]);
+                break;
+            }
+        }
+    }
+    return record;
+}
+
+vector<string> Table::record_to_str(const vector<Value> &record) const {
+    std::vector<std::string> strs;
+    for (int i = 0; i < fields.size(); ++i) {
+        switch (fields[i].type) {
+            case FieldType::INT: {
+                strs.emplace_back(std::to_string(std::get<int>(record[i])));
+                break;
+            }
+            case FieldType::FLOAT: {
+                strs.emplace_back(std::to_string(std::get<float>(record[i])));
+                break;
+            }
+            case FieldType::VARCHAR: {
+                strs.emplace_back(std::get<std::string>(record[i]));
+                break;
+            }
+        }
+    }
+    return strs;
+}
+
+// fast load, write whole new page
+void Table::write_whole_page(vector<std::vector<Value>> &data) {
+    int index;
+    record_num += (int) data.size();
+    int page_id = (record_num + 1) / record_num_per_page + 1;
+    BufType buf = bpm->allocPage(fileID, page_id, index, false);
+    buf += PAGE_HEADER / 4;
+    for (auto &record: data) {
+        record_to_buf(record, buf);
+        buf += record_length / 4;
+    }
+    bpm->markDirty(index);
 }
