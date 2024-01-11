@@ -25,6 +25,7 @@ void Database::use_database() {
     MyBitMap::initConst();//新加的初始化
     for (const auto &entry: std::filesystem::directory_iterator("data/base/" + name)) {
         Table table;
+        if (entry.path().extension().string() != ".db") continue;
         table.name = entry.path().filename().string();
         fm->openFile(entry.path().string().c_str(), table.fileID);
         table.read_file();
