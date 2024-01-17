@@ -54,6 +54,9 @@ std::any Visitor::visitShow_dbs(SQLParser::Show_dbsContext *context) {
 std::any Visitor::visitUse_db(SQLParser::Use_dbContext *context) {
     std::string db_name = context->Identifier()->getText();
     if (current_db != nullptr) {
+        if (current_db->name == db_name) {
+            return {};
+        }
         current_db->close_database();
     }
     for (auto &db: databases) {
@@ -219,7 +222,7 @@ std::any Visitor::visitDescribe_table(SQLParser::Describe_tableContext *context)
                 line += (key + ",");
             }
             line.pop_back();
-            line +=  ") REFERENCES " + foreign_key.table_name + "(";
+            line += ") REFERENCES " + foreign_key.table_name + "(";
             for (auto &key: foreign_key.ref_keys) {
                 line += (key + ",");
             }
@@ -237,7 +240,7 @@ std::any Visitor::visitLoad_table(SQLParser::Load_tableContext *context) {
     auto file_name = context->String()[0]->getText();
     auto terminator = context->String()[1]->getText();
     auto &table = current_db->tables[table_index];
-    ifstream file(file_name.substr(1, file_name.size() - 2));
+    ifstream file(file_name.substr(1, file_name.size() - 2), ios::in);
     if (!file.is_open()) throw Error("FILE NOT FOUND");
     // decide whether to alloc new page
     string line;
@@ -251,24 +254,58 @@ std::any Visitor::visitLoad_table(SQLParser::Load_tableContext *context) {
                 flag = true;
                 break;
             }
-            count++;
             // split line
             vector<string> record;
             stringstream ss(line);
             string token;
-            if (count == 58897){
-                int a = 1;
-            }
             while (getline(ss, token, ',')) {
                 record.push_back(token);
             }
             data[i] = table.str_to_record(record);
+            count++;
         }
         data.resize(i);
         table.write_whole_page(data);
-        // problem
         if (flag) break;
     }
-    output_sys.output({{"rows"},{to_string(count)}});
+    file.close();
+    table.write_file();
+    output_sys.output({{"rows"}, {to_string(count)}});
+    return {};
+}
+
+std::any Visitor::visitSelect_table_(SQLParser::Select_table_Context *context) {
+    return visitChildren(context);
+}
+
+std::any Visitor::visitSelect_table(SQLParser::Select_tableContext *context) {
+    auto selectors = context->selectors()->selector();
+    auto table_names = context->identifiers()->Identifier();
+    for (auto &table_name: table_names) {
+        auto table_index = current_db->get_table_index(table_name->getText());
+        if (table_index == -1) {
+            throw Error("TABLE DOESN'T EXIST");
+        }
+        vector<Record> content;
+        auto &table = current_db->tables[table_index];
+        if (selectors.empty()) {
+            content = table.all_records();
+        } else {
+            vector<string> columns;
+            for (auto &selector: selectors) {
+                if (selector->column()) {
+                    auto column = selector->column()->getText();
+                    columns.push_back(column);
+                } else {
+                    throw UnimplementedError();
+                    //                    auto aggregator = selector->aggregator()->getText();
+                    //                    table.select_aggregator(aggregator);
+                }
+            }
+//            content = table.select_records(columns);
+        }
+        output_sys.output({{"TABLE"}, {table_name->getText()}});
+        output_sys.output(table.records_to_str(content));
+    }
     return {};
 }

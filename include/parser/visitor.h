@@ -25,8 +25,8 @@ class Visitor: public SQLVisitor {
     std::any visitInsert_into_table(SQLParser::Insert_into_tableContext *context) override { return {}; }
     std::any visitDelete_from_table(SQLParser::Delete_from_tableContext *context) override { return {}; }
     std::any visitUpdate_table(SQLParser::Update_tableContext *context) override { return {}; }
-    std::any visitSelect_table_(SQLParser::Select_table_Context *context) override { return {}; }
-    std::any visitSelect_table(SQLParser::Select_tableContext *context) override { return {}; }
+    std::any visitSelect_table_(SQLParser::Select_table_Context *context) override;
+    std::any visitSelect_table(SQLParser::Select_tableContext *context) override;
     std::any visitAlter_add_index(SQLParser::Alter_add_indexContext *context) override { return {}; }
     std::any visitAlter_drop_index(SQLParser::Alter_drop_indexContext *context) override { return {}; }
     std::any visitAlter_table_drop_pk(SQLParser::Alter_table_drop_pkContext *context) override { return {}; }
@@ -59,4 +59,9 @@ class Visitor: public SQLVisitor {
     std::any visitOperator_(SQLParser::Operator_Context *context) override { return {}; }
     std::any visitAggregator(SQLParser::AggregatorContext *context) override { return {}; }
 };
+
+class Selector{
+
+};
+
 #endif//DBS_VISITOR_H

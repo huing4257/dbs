@@ -13,9 +13,14 @@ private:
     std::string msg;
 public:
     explicit Error(std::string msg) : msg(std::move(msg)) {}
-    const char *what() const noexcept override {
+    [[nodiscard]] const char *what() const noexcept override {
         return msg.c_str();
     }
+};
+
+class UnimplementedError : public Error {
+public:
+    explicit UnimplementedError(const std::string& msg= "") : Error(msg+"Unimplemented!") {}
 };
 
 

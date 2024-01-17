@@ -30,15 +30,23 @@ void Database::use_database() {
         fm->openFile(entry.path().string().c_str(), table.fileID);
         table.read_file();
         table.construct();
+        cerr << table.name<<"-";
+        cerr << table.fileID<<"-";
+        cerr << entry.path().string().c_str() << endl;
         tables.push_back(table);
     }
 }
 
 void Database::close_database() {
     for (auto &table: tables) {
-        bpm->close();
-        fm->closeFile(table.fileID);
+        table.close_table();
     }
+}
+
+void Table::close_table() const {
+    write_file();
+    bpm->writeBack(fileID);
+    fm->closeFile(fileID);
 }
 
 void Database::create_open_table(Table &table) {
@@ -62,6 +70,7 @@ void Database::drop_table(const string &table_name) {
         throw Error("TABLE DOESN'T EXIST");
     }
 }
+
 void Table::write_file() const {
     int index;
     unsigned int offset = 0;
@@ -123,9 +132,12 @@ void Table::write_file() const {
             offset += 1;
         }
     }
+    // save record num
+    buf[offset] = (unsigned int) (record_num);
+    offset += 1;
     bpm->markDirty(index);
-    bpm->writeBack(index);
 }
+
 void Table::read_file() {
     int index;
     int offset = 0;
@@ -185,7 +197,9 @@ void Table::read_file() {
         }
         fields.push_back(field);
     }
+    record_num = buf[offset];
 }
+
 bool Table::construct() {
     record_length = 0;
     for (auto &field: fields) {
@@ -277,12 +291,26 @@ std::vector<Value> Table::buf_to_record(const unsigned int *buf) const {
     return record;
 }
 
-std::vector<Value> Table::get_record(int offset) const {
+//todo: to be optimized
+vector<vector<Value>> Table::get_record_range(std::pair<int,int> range) const {
     int index;
-    BufType buf = bpm->getPage(fileID, (offset-1) / record_num_per_page + 2, index);
-    int tmp = (offset % record_num_per_page) - 1;
-    buf = buf + tmp * record_length/4 + PAGE_HEADER/4;
-    return buf_to_record(buf);
+    int start = range.first;
+    int end = range.second;
+    if (start > end) {
+        throw Error("START INDEX IS LARGER THAN END INDEX");
+    }
+    if (start < 0 || end >= record_num) {
+        throw Error("INDEX OUT OF RANGE");
+    }
+    vector<vector<Value>> records;
+    for (int i = start; i <= end; ++i) {
+        int page_id = (i + 1) / record_num_per_page + 1;
+        int offset = i % record_num_per_page;
+        BufType buf = bpm->getPage(fileID, page_id, index);
+        buf = buf + offset * record_length + PAGE_HEADER;
+        records.push_back(buf_to_record(buf));
+    }
+    return records;
 }
 
 bool Table::add_record(const vector<Value> &record) {

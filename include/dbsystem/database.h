@@ -22,6 +22,8 @@ enum class FieldType {
 
 using Value = std::variant<int, float, std::string>;
 
+typedef std::vector<Value> Record;
+
 struct StringVisitor{
     std::string operator()(int value) const {
         return std::to_string(value);
@@ -62,12 +64,13 @@ class Table {
 private:
     void record_to_buf(const std::vector<Value> &record, unsigned int *buf) const;
     std::vector<Value> buf_to_record(const unsigned int *buf) const;
+    [[nodiscard]] std::vector<std::vector<Value>> get_record_range(std::pair<int,int>) const;
 public:
     std::vector<int> primary_key_index;
     // using byte as unit, align to 32 byte
     int record_length = 0;
     int record_num_per_page = 0;
-    int record_num = 0;
+    unsigned int record_num = 0;
     // use bitmap to record which place is empty
     static const int PAGE_HEADER = 64;
 
@@ -80,11 +83,24 @@ public:
     void read_file();
     bool construct();
 
-    [[nodiscard]] std::vector<Value> get_record(int offset) const;
     bool add_record(const std::vector<Value> &record);
 
     [[nodiscard]] std::vector<Value> str_to_record(const std::vector<std::string> &line) const;
     [[nodiscard]] std::vector<std::string> record_to_str(const std::vector<Value> &record) const;
+    [[nodiscard]] std::vector<std::vector<std::string>> records_to_str(const std::vector<std::vector<Value>> &record) const {
+        std::vector<std::vector<std::string>> res;
+        for (auto &r : record) {
+            res.push_back(record_to_str(r));
+        }
+        return res;
+    }
+
+
+    [[nodiscard]] std::vector<std::vector<Value>> all_records() const{
+        return get_record_range({0, record_num});
+    }
+    [[nodiscard]] std::vector<std::vector<Value>> select_records(std::vector<std::string>) const;
+
 
     void write_whole_page(std::vector<std::vector<Value>> &data);
 
@@ -100,6 +116,7 @@ public:
         record_num_per_page = table.record_num_per_page;
         record_num = table.record_num;
     }
+    void close_table() const;
 };
 
 class Database {
