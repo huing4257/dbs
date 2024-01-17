@@ -23,6 +23,9 @@ void init_database() {
 }
 void Database::use_database() {
     MyBitMap::initConst();//新加的初始化
+    if (!tables.empty()) {
+        return;
+    }
     for (const auto &entry: std::filesystem::directory_iterator("data/base/" + name)) {
         Table table;
         if (entry.path().extension().string() != ".db") continue;
@@ -30,23 +33,15 @@ void Database::use_database() {
         fm->openFile(entry.path().string().c_str(), table.fileID);
         table.read_file();
         table.construct();
-        cerr << table.name<<"-";
-        cerr << table.fileID<<"-";
-        cerr << entry.path().string().c_str() << endl;
         tables.push_back(table);
     }
 }
 
 void Database::close_database() {
+    bpm->close();
     for (auto &table: tables) {
-        table.close_table();
+        fm->closeFile(table.fileID);
     }
-}
-
-void Table::close_table() const {
-    write_file();
-    bpm->writeBack(fileID);
-    fm->closeFile(fileID);
 }
 
 void Database::create_open_table(Table &table) {
@@ -70,7 +65,6 @@ void Database::drop_table(const string &table_name) {
         throw Error("TABLE DOESN'T EXIST");
     }
 }
-
 void Table::write_file() const {
     int index;
     unsigned int offset = 0;
