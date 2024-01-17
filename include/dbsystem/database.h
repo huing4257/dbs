@@ -73,15 +73,17 @@ public:
     unsigned int record_num = 0;
     // use bitmap to record which place is empty
     static const int PAGE_HEADER = 64;
-
+    // end of metadata
+    unsigned int meta_offset = 0;
     std::string name;
     int fileID = -1;
     std::vector<Field> fields;
     PrimaryKey primary_key;
     std::vector<ForeignKey> foreign_keys;
-    void write_file() const;
+    void write_file();
     void read_file();
     bool construct();
+    void update() const;
 
     bool add_record(const std::vector<Value> &record);
 
@@ -116,7 +118,6 @@ public:
         record_num_per_page = table.record_num_per_page;
         record_num = table.record_num;
     }
-    void close_table() const;
 };
 
 class Database {
@@ -128,7 +129,6 @@ public:
     }
     void use_database();
     void close_database();
-    void create_open_table(Table &table);
     void drop_table(const std::string &table_name);
     [[nodiscard]] int get_table_index(const std::string &table_name) const{
         for (int i = 0; i < tables.size(); i++) {
@@ -138,6 +138,7 @@ public:
         }
         return -1;
     }
+    void create_open_table(Table table);
 
     ~Database() {
         close_database();

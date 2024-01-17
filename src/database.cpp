@@ -27,13 +27,13 @@ void Database::use_database() {
         return;
     }
     for (const auto &entry: std::filesystem::directory_iterator("data/base/" + name)) {
-        Table table;
         if (entry.path().extension().string() != ".db") continue;
-        table.name = entry.path().filename().string();
+        Table table;
         fm->openFile(entry.path().string().c_str(), table.fileID);
-        table.read_file();
-        table.construct();
         tables.push_back(table);
+        tables.back().read_file();
+        tables.back().construct();
+
     }
 }
 
@@ -44,12 +44,12 @@ void Database::close_database() {
     }
 }
 
-void Database::create_open_table(Table &table) {
+void Database::create_open_table(Table table) {
     auto table_name = table.name;
     fm->createFile(("data/base/" + name + "/" + table_name + ".db").c_str());
     fm->openFile(("data/base/" + name + "/" + table_name + ".db").c_str(), table.fileID);
-    table.write_file();
     tables.push_back(table);
+    tables.back().write_file();
 }
 
 void Database::drop_table(const string &table_name) {
@@ -65,7 +65,8 @@ void Database::drop_table(const string &table_name) {
         throw Error("TABLE DOESN'T EXIST");
     }
 }
-void Table::write_file() const {
+
+void Table::write_file() {
     int index;
     unsigned int offset = 0;
     // buf using 4 bytes as a unit
@@ -126,9 +127,8 @@ void Table::write_file() const {
             offset += 1;
         }
     }
-    // save record num
-    buf[offset] = (unsigned int) (record_num);
-    offset += 1;
+    buf[offset] = 0;
+    meta_offset = offset;
     bpm->markDirty(index);
 }
 
@@ -191,7 +191,18 @@ void Table::read_file() {
         }
         fields.push_back(field);
     }
+    //todo: primary key
+    this->meta_offset = offset;
     record_num = buf[offset];
+}
+
+void Table::update() const {
+    int index;
+    // buf using 4 bytes as a unit
+    BufType buf = bpm->getPage(fileID, 0, index);
+    buf[meta_offset] = record_num;
+    bpm->markDirty(index);
+    bpm->writeBack(index);
 }
 
 bool Table::construct() {
@@ -211,7 +222,7 @@ bool Table::construct() {
     }
     // align to 32 bytes
     record_length = (record_length + 31) / 32 * 32;
-    record_num_per_page = (PAGE_SIZE - 4) / record_length;
+    record_num_per_page = (PAGE_SIZE - 64) / record_length;
     for (auto &key: primary_key.keys) {
         auto field = std::find_if(fields.begin(), fields.end(), [&key](const Field &field) {
             return field.name == key;
@@ -246,6 +257,7 @@ void Table::record_to_buf(const vector<Value> &record, unsigned int *buf) const 
             }
             case FieldType::VARCHAR: {
                 auto value = std::get<std::string>(record[i]);
+                auto a = buf + offset;
                 memcpy(buf + offset, value.c_str(), value.size());
                 offset += (fields[i].length + 3) / 4;
                 break;
@@ -253,6 +265,7 @@ void Table::record_to_buf(const vector<Value> &record, unsigned int *buf) const 
         }
     }
 }
+
 std::vector<Value> Table::buf_to_record(const unsigned int *buf) const {
     int offset = 0;
     std::vector<Value> record;
@@ -378,9 +391,12 @@ void Table::write_whole_page(vector<std::vector<Value>> &data) {
     int page_id = (record_num + 1) / record_num_per_page + 1;
     BufType buf = bpm->allocPage(fileID, page_id, index, false);
     buf += PAGE_HEADER / 4;
+    int i = 0;
     for (auto &record: data) {
+        i++;
         record_to_buf(record, buf);
         buf += record_length / 4;
     }
+    update();
     bpm->markDirty(index);
 }
