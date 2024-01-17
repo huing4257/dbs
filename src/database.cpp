@@ -23,6 +23,9 @@ void init_database() {
 }
 void Database::use_database() {
     MyBitMap::initConst();//新加的初始化
+    if (!tables.empty()) {
+        return;
+    }
     for (const auto &entry: std::filesystem::directory_iterator("data/base/" + name)) {
         Table table;
         table.name = entry.path().filename().string();
@@ -34,8 +37,8 @@ void Database::use_database() {
 }
 
 void Database::close_database() {
+    bpm->close();
     for (auto &table: tables) {
-        bpm->close();
         fm->closeFile(table.fileID);
     }
 }

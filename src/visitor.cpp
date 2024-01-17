@@ -54,6 +54,9 @@ std::any Visitor::visitShow_dbs(SQLParser::Show_dbsContext *context) {
 std::any Visitor::visitUse_db(SQLParser::Use_dbContext *context) {
     std::string db_name = context->Identifier()->getText();
     if (current_db != nullptr) {
+        if (current_db->name == db_name) {
+            return {};
+        }
         current_db->close_database();
     }
     for (auto &db: databases) {
