@@ -44,7 +44,7 @@ class Visitor: public SQLVisitor {
     std::any visitValue_list(SQLParser::Value_listContext *context) override { return {}; }
     std::any visitValue(SQLParser::ValueContext *context) override { return {}; }
     std::any visitWhere_and_clause(SQLParser::Where_and_clauseContext *context) override { return {}; }
-    std::any visitWhere_operator_expression(SQLParser::Where_operator_expressionContext *context) override { return {}; }
+    std::any visitWhere_operator_expression(SQLParser::Where_operator_expressionContext *context) override;
     std::any visitWhere_operator_select(SQLParser::Where_operator_selectContext *context) override { return {}; }
     std::any visitWhere_null(SQLParser::Where_nullContext *context) override { return {}; }
     std::any visitWhere_in_list(SQLParser::Where_in_listContext *context) override { return {}; }

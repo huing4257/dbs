@@ -290,7 +290,7 @@ std::vector<Value> Table::buf_to_record(const unsigned int *buf) const {
             case FieldType::VARCHAR: {
                 // use length to store varchar
                 unsigned int value_length = field.length;
-                string value((char *) (buf + offset), value_length);
+                string value((char *) (buf + offset));
                 offset += (int) ((value_length + 3) / 4);
                 record.emplace_back(value);
                 break;
@@ -316,7 +316,7 @@ vector<vector<Value>> Table::get_record_range(std::pair<int,int> range) const {
         int page_id = (i + 1) / record_num_per_page + 1;
         int offset = i % record_num_per_page;
         BufType buf = bpm->getPage(fileID, page_id, index);
-        buf = buf + offset * record_length + PAGE_HEADER;
+        buf = buf + offset * record_length /4 + PAGE_HEADER/4;
         records.push_back(buf_to_record(buf));
     }
     return records;

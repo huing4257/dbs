@@ -45,6 +45,8 @@ set(SOURCES_STAGE
         include/utils/error.h
         src/output.cpp
         include/utils/output.h
+        src/Selector.cpp
+        include/utils/Selector.h
 )
 
 add_executable(${PROJECT_NAME} ${SOURCES_STAGE})

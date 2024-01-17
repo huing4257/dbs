@@ -10,6 +10,8 @@
 #include <vector>
 #include <variant>
 #include <optional>
+#include <sstream>
+#include "utils/error.h"
 
 class Database;
 extern Database *current_db;
@@ -99,8 +101,9 @@ public:
 
 
     [[nodiscard]] std::vector<std::vector<Value>> all_records() const{
-        return get_record_range({0, record_num});
+        return get_record_range({0, record_num-1});
     }
+
     [[nodiscard]] std::vector<std::vector<Value>> select_records(std::vector<std::string>) const;
 
 
@@ -127,7 +130,21 @@ public:
         }
         return -1;
     }
+
     void create_open_table(Table table);
+
+    [[nodiscard]] int get_column_index(const std::vector<std::string> &column) const {
+        for (auto &t : tables) {
+            if (t.name == column[0]) {
+                for (int i = 0; i < t.fields.size(); i++) {
+                    if (t.fields[i].name == column[1]) {
+                        return i;
+                    }
+                }
+            }
+        }
+        throw Error("No such column");
+    }
 
     ~Database() {
         close_database();

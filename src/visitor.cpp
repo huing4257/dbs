@@ -5,6 +5,7 @@
 #include "utils/error.h"
 #include "utils/output.h"
 #include <filesystem>
+#include "utils/Selector.h"
 
 using namespace std;
 Database *current_db = nullptr;
@@ -298,14 +299,38 @@ std::any Visitor::visitSelect_table(SQLParser::Select_tableContext *context) {
                     columns.push_back(column);
                 } else {
                     throw UnimplementedError();
-                    //                    auto aggregator = selector->aggregator()->getText();
-                    //                    table.select_aggregator(aggregator);
                 }
             }
 //            content = table.select_records(columns);
+        }
+        if (context->where_and_clause()){
+            auto where_and_clause = context->where_and_clause();
+            auto where_clause = where_and_clause->where_clause();
+            for (auto &clause: where_clause) {
+                // check type, if type is Where_operator_selectContext
+                // then it's a select statement
+                std::any result = clause->accept(this);
+                auto ptr = std::any_cast<std::shared_ptr<Where>>(result);
+                content.erase(std::remove_if(content.begin(), content.end(), [ptr](Record &record) {
+                    return !ptr->choose(record);
+                }), content.end());
+
+            }
         }
         output_sys.output({{"TABLE"}, {table_name->getText()}});
         output_sys.output(table.records_to_str(content));
     }
     return {};
+}
+std::any Visitor::visitWhere_operator_expression(SQLParser::Where_operator_expressionContext *context) {
+    std::shared_ptr<Where> where = std::make_shared<OperatorExpression>();
+    auto operator_expression = std::dynamic_pointer_cast<OperatorExpression>(where);
+    for (auto &column: context->column()->Identifier()) {
+        operator_expression->column.push_back(column->getText());
+    }
+    operator_expression->op = context->operator_()->getText();
+    if(auto value = context->expression()->value()){
+        operator_expression->value = value->getText();
+    }
+    return where;
 }
