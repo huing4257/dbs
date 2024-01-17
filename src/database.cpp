@@ -30,14 +30,17 @@ void Database::use_database() {
         if (entry.path().extension().string() != ".db") continue;
         Table table;
         fm->openFile(entry.path().string().c_str(), table.fileID);
+        table.read_file();
+        table.construct();
         tables.push_back(table);
-        tables.back().read_file();
-        tables.back().construct();
-
     }
+    int a = 0;
 }
 
 void Database::close_database() {
+    for (auto &table: tables) {
+        table.update();
+    }
     bpm->close();
     for (auto &table: tables) {
         fm->closeFile(table.fileID);
@@ -202,7 +205,6 @@ void Table::update() const {
     BufType buf = bpm->getPage(fileID, 0, index);
     buf[meta_offset] = record_num;
     bpm->markDirty(index);
-    bpm->writeBack(index);
 }
 
 bool Table::construct() {

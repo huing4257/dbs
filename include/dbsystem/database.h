@@ -107,17 +107,6 @@ public:
     void write_whole_page(std::vector<std::vector<Value>> &data);
 
     Table() = default;
-    Table(const Table &table) {
-        name = table.name;
-        fileID = table.fileID;
-        fields = table.fields;
-        primary_key = table.primary_key;
-        foreign_keys = table.foreign_keys;
-        primary_key_index = table.primary_key_index;
-        record_length = table.record_length;
-        record_num_per_page = table.record_num_per_page;
-        record_num = table.record_num;
-    }
 };
 
 class Database {
