@@ -320,8 +320,9 @@ std::any Visitor::visitSelect_table(SQLParser::Select_tableContext *context) {
                     // then it's a select statement
                     std::any result = clause->accept(this);
                     auto ptr = std::any_cast<std::shared_ptr<Where>>(result);
-                    content.erase(std::remove_if(content.begin(), content.end(), [ptr](Record &record) {
-                                      return !ptr->choose(record);
+                    content.erase(std::remove_if(content.begin(), content.end(), [ptr](optional<Record> &record) {
+                                      if (!record.has_value()) return false;
+                                      return !ptr->choose(record.value());
                                   }),
                                   content.end());
                 }
@@ -392,5 +393,102 @@ std::any Visitor::visitInsert_into_table(SQLParser::Insert_into_tableContext *co
         table.add_record(record);
     }
     output_sys.output({{"rows"}, {to_string(value_lists.size())}});
-    return std::any();
+    return {};
+}
+std::any Visitor::visitUpdate_table(SQLParser::Update_tableContext *context) {
+    auto table_name = context->Identifier()->getText();
+    int table_index = current_db->get_table_index(table_name);
+    if (table_index == -1) {
+        throw Error("TABLE DOESN'T EXIST");
+    }
+    auto &table = current_db->tables[table_index];
+    auto set_clause = context->set_clause();
+    int n = set_clause->Identifier().size();
+    if (n != set_clause->value().size() || n!= set_clause->EqualOrAssign().size()) {
+        throw Error("VALUE NUMBER DOESN'T MATCH");
+    }
+    auto where_clause = context->where_and_clause();
+    vector<shared_ptr<Where>> checker;
+    if (where_clause) {
+        for (auto &clause: where_clause->where_clause()) {
+            std::any result = clause->accept(this);
+            auto ptr = std::any_cast<std::shared_ptr<Where>>(result);
+            checker.push_back(ptr);
+        }
+    }
+    int count = 0;
+    for (int i = 0; i < table.record_num; ++i) {
+        bool flag = true;
+        auto record = table.get_record_range({i,i})[0];
+        if (!record.has_value()) continue;
+        for (auto &ptr: checker) {
+            if(ptr->column.size() == 1){ ptr->column = {table.name, ptr->column[0]}; }
+            if (!ptr->choose(record.value())) {
+                flag = false;
+                break;
+            }
+        }
+        if (!flag) continue;
+        count++;
+        for (int j = 0; j < n; ++j) {
+            auto column = set_clause->Identifier()[j]->getText();
+            if (column == table.primary_key.name) {
+                throw Error("PRIMARY KEY CAN'T BE UPDATED");
+            }
+            int index = current_db->get_column_index({table.name, column});
+            if (index == -1) {
+                throw Error("COLUMN DOESN'T EXIST");
+            }
+            auto value = set_clause->value()[j];
+            switch (table.fields[index].type) {
+                case FieldType::INT:
+                    record.value()[index] = std::stoi(value->getText());
+                    break;
+                case FieldType::FLOAT:
+                    record.value()[index] = std::stod(value->getText());
+                    break;
+                case FieldType::VARCHAR:
+                    record.value()[index] = value->getText().substr(1, value->getText().size() - 2);
+                    break;
+            }
+        }
+        table.update_record(i, record.value());
+    }
+    output_sys.output({{"rows"}, {to_string(count)}});
+    return {};
+}
+std::any Visitor::visitDelete_from_table(SQLParser::Delete_from_tableContext *context) {
+    auto table_name = context->Identifier()->getText();
+    int table_index = current_db->get_table_index(table_name);
+    if (table_index == -1) {
+        throw Error("TABLE DOESN'T EXIST");
+    }
+    auto &table = current_db->tables[table_index];
+    auto where_clause = context->where_and_clause();
+    vector<shared_ptr<Where>> checker;
+    if (where_clause) {
+        for (auto &clause: where_clause->where_clause()) {
+            std::any result = clause->accept(this);
+            auto ptr = std::any_cast<std::shared_ptr<Where>>(result);
+            checker.push_back(ptr);
+        }
+    }
+    int count = 0;
+    for (int i = 0; i < table.record_num; ++i) {
+        bool flag = true;
+        auto record = table.get_record_range({i,i})[0];
+        if (!record.has_value()) continue;
+        for (auto &ptr: checker) {
+            if(ptr->column.size() == 1){ ptr->column = {table.name, ptr->column[0]}; }
+            if (!ptr->choose(record.value())) {
+                flag = false;
+                break;
+            }
+        }
+        if (!flag) continue;
+        count++;
+        table.delete_record(i);
+    }
+    output_sys.output({{"rows"}, {to_string(count)}});
+    return {};
 }

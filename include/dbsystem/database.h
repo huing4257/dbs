@@ -91,23 +91,24 @@ public:
 
     [[nodiscard]] std::vector<Value> str_to_record(const std::vector<std::string> &line) const;
     [[nodiscard]] std::vector<std::string> record_to_str(const std::vector<Value> &record) const;
-    [[nodiscard]] std::vector<std::vector<std::string>> records_to_str(const std::vector<std::vector<Value>> &record) const {
+    [[nodiscard]] std::vector<std::vector<std::string>> records_to_str(const std::vector<std::optional<std::vector<Value>>> &record) const {
         std::vector<std::vector<std::string>> res;
         for (auto &r : record) {
-            res.push_back(record_to_str(r));
+            if (r) {
+                res.push_back(record_to_str(r.value()));
+            }
         }
         return res;
     }
-    [[nodiscard]] std::vector<std::vector<Value>> get_record_range(std::pair<int,int>) const;
+    [[nodiscard]] std::vector<std::optional<std::vector<Value>>> get_record_range(std::pair<int,int>) const;
 
-    [[nodiscard]] std::vector<std::vector<Value>> all_records() const{
+    [[nodiscard]] std::vector<std::optional<std::vector<Value>>> all_records() const{
         return get_record_range({0, record_num-1});
     }
 
-    [[nodiscard]] std::vector<std::vector<Value>> select_records(std::vector<std::string>) const;
-
-
+    void update_record(int i, std::vector<Value> record);
     void write_whole_page(std::vector<std::vector<Value>> &data);
+    void delete_record(int i);
 
     Table() = default;
 };

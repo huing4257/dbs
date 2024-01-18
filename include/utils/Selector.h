@@ -27,12 +27,12 @@ enum class SelectorType {
 
 class Where {
 public:
+    std::vector<std::string> column;
     virtual bool choose(Record record) = 0;
 };
 
 class OperatorExpression : public Where {
 public:
-    std::vector<std::string> column;
     std::string op;
     std::string value;
     bool choose(Record record) override;

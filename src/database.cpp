@@ -209,7 +209,7 @@ void Table::update() const {
 }
 
 bool Table::construct() {
-    record_length = 0;
+    record_length = 4;
     for (auto &field: fields) {
         switch (field.type) {
             case FieldType::INT:
@@ -244,6 +244,8 @@ bool Table::construct() {
 
 void Table::record_to_buf(const vector<Value> &record, unsigned int *buf) const {
     int offset = 0;
+    buf[0] = 1;
+    offset += 1;
     for (int i = 0; i < fields.size(); ++i) {
         switch (fields[i].type) {
             case FieldType::INT: {
@@ -270,7 +272,7 @@ void Table::record_to_buf(const vector<Value> &record, unsigned int *buf) const 
 }
 
 std::vector<Value> Table::buf_to_record(const unsigned int *buf) const {
-    int offset = 0;
+    int offset = 1;
     std::vector<Value> record;
     for (const auto &field: fields) {
         switch (field.type) {
@@ -305,7 +307,7 @@ std::vector<Value> Table::buf_to_record(const unsigned int *buf) const {
 }
 
 //todo: to be optimized
-vector<vector<Value>> Table::get_record_range(std::pair<int, int> range) const {
+vector<optional<vector<Value>>> Table::get_record_range(std::pair<int, int> range) const {
     int index;
     int start = range.first;
     int end = range.second;
@@ -315,13 +317,17 @@ vector<vector<Value>> Table::get_record_range(std::pair<int, int> range) const {
     if (start < 0 || end >= record_num) {
         throw Error("INDEX OUT OF RANGE");
     }
-    vector<vector<Value>> records;
+    vector<optional<vector<Value>>> records;
     for (int i = start; i <= end; ++i) {
         int page_id = (i + 1) / record_num_per_page + 1;
         int offset = i % record_num_per_page;
         BufType buf = bpm->getPage(fileID, page_id, index);
         buf = buf + offset * record_length / 4 + PAGE_HEADER / 4;
-        records.push_back(buf_to_record(buf));
+        if (buf[0] == 0) {
+            records.emplace_back(nullopt);
+            continue;
+        }
+        records.emplace_back(buf_to_record(buf));
     }
     return records;
 }
@@ -417,5 +423,23 @@ void Table::write_whole_page(vector<std::vector<Value>> &data) {
         buf += record_length / 4;
     }
     update();
+    bpm->markDirty(index);
+}
+void Table::update_record(int i, std::vector<Value> record) {
+    int index;
+    int page_id = (i + 1) / record_num_per_page + 1;
+    int offset = i % record_num_per_page;
+    BufType buf = bpm->getPage(fileID, page_id, index);
+    buf = buf + offset * record_length/4 + PAGE_HEADER/4;
+    record_to_buf(record, buf);
+    bpm->markDirty(index);
+}
+void Table::delete_record(int i) {
+    int index;
+    int page_id = (i + 1) / record_num_per_page + 1;
+    int offset = i % record_num_per_page;
+    BufType buf = bpm->getPage(fileID, page_id, index);
+    buf = buf + offset * record_length/4 + PAGE_HEADER/4;
+    buf[0] = 0;
     bpm->markDirty(index);
 }
