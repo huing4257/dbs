@@ -131,6 +131,22 @@ void Table::write_file() {
             offset += 1;
         }
     }
+    // primary key
+    buf[offset] = (unsigned int) (primary_key.keys.size());
+    offset += 1;
+    if (!primary_key.keys.empty()) {
+        buf[offset] = primary_key.name.size();
+        offset += 1;
+        memcpy(buf + offset, primary_key.name.c_str(), primary_key.name.size());
+        offset += (primary_key.name.size() + 3) / 4 * 4;
+        for (const auto &key: primary_key.keys) {
+            buf[offset] = key.size();
+            offset += 1;
+            memcpy(buf + offset, key.c_str(), key.size());
+            offset += (key.size() + 3) / 4 * 4;
+        }
+    }
+    // record num
     buf[offset] = 0;
     meta_offset = offset;
     bpm->markDirty(index);
@@ -196,6 +212,20 @@ void Table::read_file() {
         fields.push_back(field);
     }
     //todo: primary key
+    primary_key.keys.clear();
+    auto key_num = buf[offset];
+    offset += 1;
+    auto key_name_length = buf[offset];
+    offset ++;
+    if (key_name_length != 0){
+        primary_key.name = string((char *)(buf + offset),key_name_length);
+    }
+    for (int i = 0; i < key_num; ++i){
+        int value_length = (int) buf[offset];
+        offset += 1;
+        primary_key.keys.emplace_back((char *) (buf + offset), value_length);
+        offset += (value_length + 3) / 4 * 4;
+    }
     this->meta_offset = offset;
     record_num = buf[offset];
 }
@@ -447,15 +477,15 @@ optional<int> PageNode::search(const Key &key) const {
     return nullopt;
 }
 
-void PageNode::insert(const Key& key, int id) {
+void PageNode::insert(const Key &key, int id) {
     int index;
     BufType buf = bpm->getPage(meta.fileID, page_id, index);
 
     auto records = to_vec();
     auto it = std::lower_bound(records.begin(), records.end(),
-                               key, [](const auto& record, const Key& k) {
-        return record.first < k;
-    });
+                               key, [](const auto &record, const Key &k) {
+                                   return record.first < k;
+                               });
     records.insert(it, {key, id});
     record_num = static_cast<int>(records.size());
     buf[4] = record_num;
@@ -472,12 +502,12 @@ std::vector<IndexRecord> PageNode::to_vec() const {
     for (int i = 0; i < record_num; ++i) {
         Key key;
         for (int j = 0; j < meta.key_num; ++j) {
-            key.push_back((int)buf[offset + j]);
+            key.push_back((int) buf[offset + j]);
         }
         offset += meta.key_num;
-        int record_id = (int)buf[offset];
+        int record_id = (int) buf[offset];
         offset += 1;
-        records.emplace_back(key,record_id);
+        records.emplace_back(key, record_id);
     }
     bpm->access(index);
     return records;
@@ -502,13 +532,13 @@ void PageNode::pop_back() {
 void PageNode::push_front(IndexRecord record) {
     record_num++;
     int index;
-    auto buf = bpm->getPage(meta.fileID,page_id,index);
+    auto buf = bpm->getPage(meta.fileID, page_id, index);
     buf[4] = record_num;
     int offset = 5;
-    meta.records_to_buf((buf+offset),{std::move(record)});
+    meta.records_to_buf((buf + offset), {std::move(record)});
     offset += meta.key_num + 1;
     auto records = to_vec();
-    meta.records_to_buf((buf+offset),records);
+    meta.records_to_buf((buf + offset), records);
     bpm->markDirty(index);
 }
 
@@ -576,7 +606,7 @@ bool PageNode::borrow() {
             pred_page_node.update();
             auto index = pred_page_node.get_index_in_parent();
             auto parent_page_node = meta.page_to_node((int) parent_page);
-            parent_page_node.update_record(index,records.back().first);
+            parent_page_node.update_record(index, records.back().first);
             return true;
         }
     }
@@ -617,7 +647,7 @@ void PageNode::remove(const Key &key) {
     int index;
     BufType buf = bpm->getPage(meta.fileID, page_id, index);
     buf[4] = record_num;
-    meta.records_to_buf( buf + 5, records);
+    meta.records_to_buf(buf + 5, records);
     bpm->markDirty(index);
 }
 
