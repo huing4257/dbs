@@ -68,6 +68,7 @@ private:
     std::vector<Value> buf_to_record(const unsigned int *buf) const;
 
 public:
+    int fileID = -1;
     std::vector<int> primary_key_index;
     // using byte as unit, align to 32 byte
     int record_length = 0;
@@ -78,7 +79,6 @@ public:
     // end of metadata
     unsigned int meta_offset = 0;
     std::string name;
-    int fileID = -1;
     std::vector<Field> fields;
     PrimaryKey primary_key;
     std::vector<ForeignKey> foreign_keys;
@@ -106,7 +106,7 @@ public:
         return get_record_range({0, record_num-1});
     }
 
-    void update_record(int i, std::vector<Value> record);
+    void update_record(int i, const std::vector<Value>& record);
     void write_whole_page(std::vector<std::vector<Value>> &data);
     void delete_record(int i);
 

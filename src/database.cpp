@@ -3,12 +3,13 @@
 //
 
 #include "dbsystem/database.h"
+#include "dbsystem/index.h"
 #include "filesystem/bufmanager/BufPageManager.h"
 #include "filesystem/fileio/FileManager.h"
 #include "utils/error.h"
 #include <algorithm>
 #include <cstring>
-#include <cmath>
+#include <utility>
 
 auto fm = std::make_unique<FileManager>();
 auto bpm = std::make_unique<BufPageManager>(fm.get());
@@ -35,7 +36,6 @@ void Database::use_database() {
         table.construct();
         tables.push_back(table);
     }
-    int a = 0;
 }
 
 void Database::close_database() {
@@ -79,7 +79,7 @@ void Table::write_file() {
     auto name_length = (unsigned int) (name.size());
     buf[0] = name_length;
     memcpy(buf + 1, name.c_str(), name_length);
-    offset += (name_length + 3) / 4 *4 + 1;
+    offset += (name_length + 3) / 4 * 4 + 1;
     // fields
     auto field_num = (unsigned int) (fields.size());
     buf[offset] = field_num;
@@ -89,7 +89,7 @@ void Table::write_file() {
         auto field_name_length = (unsigned int) (field.name.size());
         buf[offset] = field_name_length;
         memcpy(buf + offset + 1, field.name.c_str(), field_name_length);
-        offset += (field_name_length + 3) / 4 *4 + 1;
+        offset += (field_name_length + 3) / 4 * 4 + 1;
         // type
         buf[offset] = (unsigned int) (field.type);
         offset += 1;
@@ -232,7 +232,6 @@ bool Table::construct() {
         });
         if (field == fields.end()) {
             throw Error("PRIMARY KEY DOESN'T EXIST");
-            return false;
         }
         int index = (int) (field - fields.begin());
         primary_key_index.push_back(index);
@@ -281,9 +280,6 @@ std::vector<Value> Table::buf_to_record(const unsigned int *buf) const {
                 memcpy(&value, buf + offset, sizeof(int));
                 offset += sizeof(int) / 4;
                 record.emplace_back(value);
-                if (value == 1654) {
-                    int a = 0;
-                }
                 break;
             }
             case FieldType::FLOAT: {
@@ -333,21 +329,12 @@ vector<optional<vector<Value>>> Table::get_record_range(std::pair<int, int> rang
 }
 
 bool Table::add_record(const vector<Value> &record) {
-    //    if (record.size() != fields.size()) {
-    //        std::cout << "!ERROR RECORD SIZE DOESN'T MATCH";
-    //        return false;
-    //    }
-    //    for (int i = 0; i < fields.size(); ++i) {
-    //        if (record[i].index() != (int)fields[i].type) {
-    //            std::cout << "!ERROR RECORD TYPE DOESN'T MATCH";
-    //            return false;
-    //        }
-    //    }
+    // todo: find deleted record
     int index;
     int page_id = (record_num + 1) / record_num_per_page + 1;
     int offset = (record_num) % record_num_per_page;
     BufType buf = bpm->getPage(fileID, page_id, index);
-    buf = buf + offset * record_length/4 + PAGE_HEADER/4;
+    buf = buf + offset * record_length / 4 + PAGE_HEADER / 4;
     record_to_buf(record, buf);
     bpm->markDirty(index);
     record_num++;
@@ -381,9 +368,6 @@ vector<string> Table::record_to_str(const vector<Value> &record) const {
         switch (fields[i].type) {
             case FieldType::INT: {
                 strs.emplace_back(std::to_string(std::get<int>(record[i])));
-                if (std::get<int>(record[i]) == 1654) {
-                    int a = 0;
-                }
                 break;
             }
             case FieldType::FLOAT: {
@@ -412,30 +396,313 @@ void Table::write_whole_page(vector<std::vector<Value>> &data) {
     int page_id = (record_num + 1) / record_num_per_page + 1;
     BufType buf = bpm->allocPage(fileID, page_id, index, false);
     buf += PAGE_HEADER / 4;
-    int i = 0;
     for (auto &record: data) {
-        i++;
         record_to_buf(record, buf);
         buf += record_length / 4;
     }
     update();
     bpm->markDirty(index);
 }
-void Table::update_record(int i, std::vector<Value> record) {
+
+void Table::update_record(int i, const std::vector<Value> &record) {
     int index;
     int page_id = (i + 1) / record_num_per_page + 1;
     int offset = i % record_num_per_page;
     BufType buf = bpm->getPage(fileID, page_id, index);
-    buf = buf + offset * record_length/4 + PAGE_HEADER/4;
+    buf = buf + offset * record_length / 4 + PAGE_HEADER / 4;
     record_to_buf(record, buf);
     bpm->markDirty(index);
 }
+
 void Table::delete_record(int i) {
     int index;
     int page_id = (i + 1) / record_num_per_page + 1;
     int offset = i % record_num_per_page;
     BufType buf = bpm->getPage(fileID, page_id, index);
-    buf = buf + offset * record_length/4 + PAGE_HEADER/4;
+    buf = buf + offset * record_length / 4 + PAGE_HEADER / 4;
     buf[0] = 0;
     bpm->markDirty(index);
+}
+
+void PageNode::update() const {
+    int index;
+    BufType buf = bpm->getPage(meta.fileID, page_id, index);
+    buf[0] = is_leaf;
+    buf[1] = pred_page;
+    buf[2] = succ_page;
+    buf[3] = parent_page;
+    buf[4] = record_num;
+    bpm->markDirty(index);
+}
+
+// todo: to be optimized
+optional<int> PageNode::search(const Key &key) const {
+    int i = 0;
+    auto records = to_vec();
+    for (; i < records.size(); ++i) {
+        if (records[i].first >= key) {
+            return records[i].second;
+        }
+    }
+    return nullopt;
+}
+
+void PageNode::insert(const Key& key, int id) {
+    int index;
+    BufType buf = bpm->getPage(meta.fileID, page_id, index);
+
+    auto records = to_vec();
+    auto it = std::lower_bound(records.begin(), records.end(),
+                               key, [](const auto& record, const Key& k) {
+        return record.first < k;
+    });
+    records.insert(it, {key, id});
+    record_num = static_cast<int>(records.size());
+    buf[4] = record_num;
+    int offset = 5;
+    meta.records_to_buf((buf + offset), records);
+    bpm->markDirty(index);
+}
+
+std::vector<IndexRecord> PageNode::to_vec() const {
+    int index;
+    BufType buf = bpm->getPage(meta.fileID, page_id, index);
+    int offset = 5;
+    std::vector<IndexRecord> records;
+    for (int i = 0; i < record_num; ++i) {
+        Key key;
+        for (int j = 0; j < meta.key_num; ++j) {
+            key.push_back((int)buf[offset + j]);
+        }
+        offset += meta.key_num;
+        int record_id = (int)buf[offset];
+        offset += 1;
+        records.emplace_back(key,record_id);
+    }
+    bpm->access(index);
+    return records;
+}
+
+void PageNode::pop_front() {
+    record_num--;
+    int index;
+    BufType buf = bpm->getPage(meta.fileID, page_id, index);
+    auto records = to_vec();
+    records.erase(records.begin());
+    buf[4] = record_num;
+    int offset = 5;
+    meta.records_to_buf((buf + offset), records);
+    bpm->markDirty(index);
+}
+
+void PageNode::pop_back() {
+    record_num--;
+}
+
+void PageNode::push_front(IndexRecord record) {
+    record_num++;
+    int index;
+    auto buf = bpm->getPage(meta.fileID,page_id,index);
+    buf[4] = record_num;
+    int offset = 5;
+    meta.records_to_buf((buf+offset),{std::move(record)});
+    offset += meta.key_num + 1;
+    auto records = to_vec();
+    meta.records_to_buf((buf+offset),records);
+    bpm->markDirty(index);
+}
+
+void PageNode::push_back(IndexRecord record) {
+    int index;
+    auto buf = bpm->getPage(meta.fileID, page_id, index);
+    buf += 5 + record_num * (meta.key_num + 1);
+    meta.records_to_buf(buf, {std::move(record)});
+    bpm->markDirty(index);
+    record_num++;
+}
+
+void PageNode::split() {
+    meta.page_num += 1;
+    PageNode new_page = {
+            meta.page_num, meta, is_leaf, pred_page, succ_page, parent_page, 0};
+    // copy second half of records to new page
+    auto records = to_vec();
+    int i = (int) (records.size() / 2);
+    for (; i < records.size(); ++i) {
+        new_page.push_back({records[i].first, records[i].second});
+    }
+    // update pred_page and succ_page
+    new_page.pred_page = page_id;
+    new_page.succ_page = succ_page;
+    if (succ_page != 0) {
+        PageNode succ_page_node = meta.page_to_node((int) succ_page);
+        succ_page_node.pred_page = new_page.page_id;
+        succ_page_node.update();
+    }
+    succ_page = new_page.page_id;
+    // update parent_page
+    if (parent_page == 0) {
+        // create new root
+        meta.page_num++;
+        PageNode new_root = {
+                meta.page_num, meta, false, 0, 0, 0, 0};
+        new_root.insert(records[i - 1].first, page_id);
+        new_root.insert(new_page.to_vec()[0].first, new_page.page_id);
+        meta.root_page_id = new_root.page_id;
+        new_page.parent_page = new_root.page_id;
+        parent_page = new_root.page_id;
+        new_root.update();
+        new_page.update();
+        return;
+    }
+    PageNode parent_page_node = meta.page_to_node((int) parent_page);
+    parent_page_node.insert(records[i - 1].first, new_page.page_id);
+    parent_page_node.update();
+    new_page.update();
+}
+
+bool PageNode::borrow() {
+    if (pred_page == 0 && succ_page == 0) {
+        return false;
+    }
+    if (pred_page != 0) {
+        PageNode pred_page_node = meta.page_to_node((int) pred_page);
+        if (pred_page_node.record_num >= (meta.m + 1) / 2) {
+            // borrow from pred_page
+            auto records = pred_page_node.to_vec();
+            insert(records.back().first, records.back().second);
+            records.pop_back();
+            pred_page_node.record_num--;
+            pred_page_node.update();
+            auto index = pred_page_node.get_index_in_parent();
+            auto parent_page_node = meta.page_to_node((int) parent_page);
+            parent_page_node.update_record(index,records.back().first);
+            return true;
+        }
+    }
+    if (succ_page != 0) {
+        PageNode succ_page_node = meta.page_to_node((int) succ_page);
+        if (succ_page_node.record_num >= (meta.m + 1) / 2) {
+            // borrow from succ_page
+            auto records = succ_page_node.to_vec();
+            insert(records.front().first, records.front().second);
+            succ_page_node.pop_front();
+            return true;
+        }
+    }
+    return false;
+}
+
+void PageNode::update_record(int i, const Key &key) const {
+    int index;
+    auto buf = bpm->getPage(meta.fileID, page_id, index);
+    buf = buf + 5 + i * (meta.key_num + 1);
+    memcpy(buf, key.data(), sizeof(unsigned int) * meta.key_num);
+    bpm->markDirty(index);
+}
+
+void PageNode::remove(const Key &key) {
+    int i = 0;
+    auto records = to_vec();
+    for (; i < records.size(); ++i) {
+        if (records[i].first == key) {
+            break;
+        }
+    }
+    if (i == records.size()) {
+        throw Error("KEY DOESN'T EXIST");
+    }
+    records.erase(records.begin() + i);
+    record_num--;
+    int index;
+    BufType buf = bpm->getPage(meta.fileID, page_id, index);
+    buf[4] = record_num;
+    meta.records_to_buf( buf + 5, records);
+    bpm->markDirty(index);
+}
+
+void Index::records_to_buf(BufType buf, const std::vector<IndexRecord> &record) const {
+    int offset = 0;
+    for (const auto &r: record) {
+        memcpy(buf + offset, r.first.data(), sizeof(unsigned int) * key_num);
+        offset += key_num;
+        memcpy(buf + offset, &r.second, sizeof(int));
+        offset += 1;
+    }
+}
+
+PageNode Index::page_to_node(int page_id) {
+    int index;
+    BufType buf = bpm->getPage(fileID, page_id, index);
+    bool is_leaf = buf[0];
+    unsigned int pred_page = buf[1];
+    unsigned int succ_page = buf[2];
+    unsigned int parent_page = buf[3];
+    unsigned int record_num = buf[4];
+    bpm->access(index);
+    return {page_id, *this, is_leaf, pred_page, succ_page, parent_page, record_num};
+}
+
+int Index::search_page_node(const Key &key) {
+    int page_id = root_page_id;
+    while (true) {
+        PageNode node = page_to_node(page_id);
+        if (node.is_leaf) {
+            return page_id;
+        }
+        int i = 0;
+        auto records = node.to_vec();
+        for (; i < records.size(); ++i) {
+            if (records[i].first >= key) {
+                break;
+            }
+        }
+        page_id = records[i].second;
+    }
+}
+
+optional<int> Index::search_record(const Key &key) {
+    auto page_id = search_page_node(key);
+    PageNode node = page_to_node(page_id);
+    return node.search(key);
+}
+
+void Index::insert(const Key &key, int record_id) {
+    auto page_id = search_page_node(key);
+    auto page = make_shared<PageNode>(page_to_node(page_id));
+    if (page->search(key)) {
+        throw Error("DUPLICATE KEY");
+    }
+    page->insert(key, record_id);
+    while (page->record_num > m) {
+        page->split();
+        page = make_shared<PageNode>(page_to_node((int) page->parent_page));
+    }
+}
+
+void Index::remove(const Key &key) {
+    auto page_id = search_page_node(key);
+    auto page = make_shared<PageNode>(page_to_node(page_id));
+    page->remove(key);
+    if (page->record_num >= m / 2) {
+        return;
+    }
+    if (page->borrow()) {
+        return;
+    }
+    // merge
+    //    int child_index = page.
+    //todo
+}
+
+int PageNode::get_index_in_parent() {
+    int index = 0;
+    auto parent_page_node = meta.page_to_node((int) parent_page);
+    auto records = parent_page_node.to_vec();
+    for (; index < records.size(); ++index) {
+        if (records[index].second == page_id) {
+            break;
+        }
+    }
+    return index;
 }
