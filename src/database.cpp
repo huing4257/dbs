@@ -389,14 +389,10 @@ vector<string> Table::record_to_str(const vector<Value> &record) const {
             case FieldType::FLOAT: {
                 auto f = std::get<double>(record[i]);
                 // 保留两位小数，四舍五入
-                f = f * 100;
-                f = round(f);
-                f = f / 100;
-                auto res = std::to_string(f);
-                size_t dotPos = res.find('.');
-                if (dotPos != std::string::npos && res.size() > dotPos + 3) {
-                    res.erase(dotPos + 3, std::string::npos);
-                }
+                string res;
+                stringstream ss;
+                ss << fixed << setprecision(2) << f;
+                ss >> res;
                 strs.emplace_back(res);
                 break;
             }
