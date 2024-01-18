@@ -146,6 +146,32 @@ void Table::write_file() {
             offset += (key.size() + 3) / 4 * 4;
         }
     }
+    buf[offset] = (unsigned int) (foreign_keys.size());
+    offset += 1;
+    for (const auto &foreign_key: foreign_keys) {
+        buf[offset] = foreign_key.name.size();
+        offset += 1;
+        memcpy(buf + offset, foreign_key.name.c_str(), foreign_key.name.size());
+        offset += (foreign_key.name.size() + 3) / 4 * 4;
+        buf[offset] = foreign_key.table_name.size();
+        offset += 1;
+        memcpy(buf + offset, foreign_key.table_name.c_str(), foreign_key.table_name.size());
+        offset += (foreign_key.table_name.size() + 3) / 4 * 4;
+        buf[offset] = foreign_key.keys.size();
+        offset += 1;
+        for (const auto &key: foreign_key.keys) {
+            buf[offset] = key.size();
+            offset += 1;
+            memcpy(buf + offset, key.c_str(), key.size());
+            offset += (key.size() + 3) / 4 * 4;
+        }
+        for (const auto &key: foreign_key.ref_keys) {
+            buf[offset] = key.size();
+            offset += 1;
+            memcpy(buf + offset, key.c_str(), key.size());
+            offset += (key.size() + 3) / 4 * 4;
+        }
+    }
     // record num
     buf[offset] = 0;
     meta_offset = offset;
@@ -211,7 +237,6 @@ void Table::read_file() {
         }
         fields.push_back(field);
     }
-    //todo: primary key
     primary_key.keys.clear();
     auto key_num = buf[offset];
     offset += 1;
@@ -225,6 +250,34 @@ void Table::read_file() {
         offset += 1;
         primary_key.keys.emplace_back((char *) (buf + offset), value_length);
         offset += (value_length + 3) / 4 * 4;
+    }
+    int foreign_key_num = buf[offset];
+    offset += 1;
+    for (int i = 0; i < foreign_key_num; ++i) {
+        ForeignKey foreign_key;
+        auto fk_name_length = buf[offset];
+        offset += 1;
+        foreign_key.name = string((char *) (buf + offset), fk_name_length);
+        offset += (fk_name_length + 3) / 4 * 4;
+        int table_name_length = buf[offset];
+        offset += 1;
+        foreign_key.table_name = string((char *) (buf + offset), table_name_length);
+        offset += (table_name_length + 3) / 4 * 4;
+        auto fk_key_num = buf[offset];
+        offset += 1;
+        for (int j = 0; j < fk_key_num; ++j) {
+            int value_length = buf[offset];
+            offset += 1;
+            foreign_key.keys.emplace_back((char *) (buf + offset), value_length);
+            offset += (value_length + 3) / 4 * 4;
+        }
+        for (int j = 0; j < fk_key_num; ++j) {
+            int value_length = buf[offset];
+            offset += 1;
+            foreign_key.ref_keys.emplace_back((char *) (buf + offset), value_length);
+            offset += (value_length + 3) / 4 * 4;
+        }
+        foreign_keys.push_back(foreign_key);
     }
     this->meta_offset = offset;
     record_num = buf[offset];
