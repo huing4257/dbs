@@ -12,6 +12,7 @@
 #include <optional>
 #include <sstream>
 #include "utils/error.h"
+#include "dbsystem/index.h"
 
 class Database;
 extern Database *current_db;
@@ -82,13 +83,14 @@ public:
     std::vector<Field> fields;
     PrimaryKey primary_key;
     std::vector<ForeignKey> foreign_keys;
+    std::vector<Index> _index;
     void write_file();
     void read_file();
     bool construct();
     void update() const;
+    void add_index(const std::string& index_name, const std::vector<std::string>& keys);
 
     bool add_record(const std::vector<Value> &record);
-
     [[nodiscard]] std::vector<Value> str_to_record(const std::vector<std::string> &line) const;
     [[nodiscard]] std::vector<std::string> record_to_str(const std::vector<Value> &record) const;
     [[nodiscard]] std::vector<std::vector<std::string>> records_to_str(const std::vector<std::optional<std::vector<Value>>> &record) const {

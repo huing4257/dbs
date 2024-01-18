@@ -231,7 +231,21 @@ std::any Visitor::visitDescribe_table(SQLParser::Describe_tableContext *context)
             line += ");\n";
         }
     }
+    if (!table._index.empty()){
+        for (auto &index: table._index){
+            if (index.name == "primary") continue;
+            line += "INDEX ";
+            line += index.name;
+            line += "(";
+            for (auto &key: index.keys){
+                line += (key + ",");
+            }
+            line.pop_back();
+            line += ")";
+        }
+    }
     output_sys.output({{line}});
+
     return {};
 }
 
@@ -491,5 +505,20 @@ std::any Visitor::visitDelete_from_table(SQLParser::Delete_from_tableContext *co
         table.delete_record(i);
     }
     output_sys.output({{"rows"}, {to_string(count)}});
+    return {};
+}
+std::any Visitor::visitAlter_add_index(SQLParser::Alter_add_indexContext *context) {
+    auto table_name = context->Identifier(0)->getText();
+    auto table_index = current_db->get_table_index(table_name);
+    if (table_index == -1) {
+        throw Error("TABLE DOESN'T EXIST");
+    }
+    auto &table = current_db->tables[table_index];
+    auto index_name = context->Identifier(1)->getText();
+    vector<string> keys;
+    for (auto &i:context->identifiers()->Identifier()){
+        keys.push_back(i->getText());
+    }
+    table.add_index(index_name,keys);
     return {};
 }

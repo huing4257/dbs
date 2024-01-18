@@ -35,6 +35,13 @@ void Database::use_database() {
         table.read_file();
         table.construct();
         tables.push_back(table);
+        auto tname = tables.back().name;
+        for (auto index:tables.back()._index){
+            auto is_open = fm->openFile(("data/base/" + name + "/" + tname + "." + index.name + ".index").c_str(),
+                                        index.fileID);
+            if (!is_open) throw Error("INDEX FILE OPEN FAILED");
+            index.read_file();
+        }
     }
 }
 
@@ -71,10 +78,10 @@ void Database::drop_table(const string &table_name) {
 }
 
 void Table::write_file() {
-    int index;
+    int page_index;
     unsigned int offset = 0;
     // buf using 4 bytes as a unit
-    BufType buf = bpm->allocPage(fileID, 0, index, false);
+    BufType buf = bpm->allocPage(fileID, 0, page_index, false);
     // name
     auto name_length = (unsigned int) (name.size());
     buf[0] = name_length;
@@ -172,10 +179,20 @@ void Table::write_file() {
             offset += (key.size() + 3) / 4 * 4;
         }
     }
+    // index
+    buf[offset] = (unsigned int) (_index.size());
+    offset += 1;
+    // obtain name, construct later
+    for (const auto &index: _index) {
+        buf[offset] = index.name.size();
+        offset += 1;
+        memcpy(buf + offset, index.name.c_str(), index.name.size());
+        offset += (index.name.size() + 3) / 4 * 4;
+    }
     // record num
     buf[offset] = 0;
     meta_offset = offset;
-    bpm->markDirty(index);
+    bpm->markDirty(page_index);
 }
 
 void Table::read_file() {
@@ -279,6 +296,17 @@ void Table::read_file() {
         }
         foreign_keys.push_back(foreign_key);
     }
+    // index
+    int index_num = buf[offset];
+    offset += 1;
+    for (int i = 0; i < index_num; ++i) {
+        Index tmp;
+        auto index_name_length = buf[offset];
+        offset += 1;
+        tmp.name = string((char *) (buf + offset), index_name_length);
+        offset += (index_name_length + 3) / 4 * 4;
+        _index.push_back(tmp);
+    }
     this->meta_offset = offset;
     record_num = buf[offset];
 }
@@ -322,6 +350,33 @@ bool Table::construct() {
     }
     //todo: check foreign key
     return true;
+}
+
+void Table::add_index(const string& index_name, const vector<string>& keys) {
+    _index.emplace_back(index_name,keys);
+    fm->createFile(("data/base/" + current_db->name + "/" + name + "." + index_name + ".index").c_str());
+    fm->openFile(("data/base/" + current_db->name + "/" + name + "." + index_name + ".index").c_str(), _index.back().fileID);
+    _index.back().write_file();
+    write_file();
+    // todo: add index to index file
+    unsigned int chunk_size = 1024;
+    for (int i = 0; i < record_num; i += chunk_size) {
+        auto content = get_record_range({i, min(i + chunk_size - 1, record_num - 1)});
+        for (int j = 0; j < content.size(); ++j) {
+            if (content[j]) {
+                Key key;
+                for (auto _i: _index.back().key_i){
+                    try {
+                        int value = std::get<int>(content[j].value()[_i]);
+                        key.push_back(value);
+                    } catch (const std::bad_variant_access& e) {
+                        throw Error("INDEX TYPE DOESN'T MATCH");
+                    }
+                }
+                _index.back().insert(key, i + j);
+            }
+        }
+    }
 }
 
 void Table::record_to_buf(const vector<Value> &record, unsigned int *buf) const {
@@ -455,7 +510,6 @@ vector<string> Table::record_to_str(const vector<Value> &record) const {
             }
             case FieldType::FLOAT: {
                 auto f = std::get<double>(record[i]);
-                // 保留两位小数，四舍五入
                 string res;
                 stringstream ss;
                 ss << fixed << setprecision(2) << f;
@@ -605,9 +659,9 @@ void PageNode::push_back(IndexRecord record) {
 }
 
 void PageNode::split() {
-    meta.page_num += 1;
     PageNode new_page = {
             meta.page_num, meta, is_leaf, pred_page, succ_page, parent_page, 0};
+    meta.page_num += 1;
     // copy second half of records to new page
     auto records = to_vec();
     int i = (int) (records.size() / 2);
@@ -626,9 +680,9 @@ void PageNode::split() {
     // update parent_page
     if (parent_page == 0) {
         // create new root
-        meta.page_num++;
         PageNode new_root = {
                 meta.page_num, meta, false, 0, 0, 0, 0};
+        meta.page_num++;
         new_root.insert(records[i - 1].first, page_id);
         new_root.insert(new_page.to_vec()[0].first, new_page.page_id);
         meta.root_page_id = new_root.page_id;
@@ -679,7 +733,7 @@ bool PageNode::borrow() {
 void PageNode::update_record(int i, const Key &key) const {
     int index;
     auto buf = bpm->getPage(meta.fileID, page_id, index);
-    buf = buf + 5 + i * (meta.key_num + 1);
+    buf = buf + 64 + i * (meta.key_num + 1);
     memcpy(buf, key.data(), sizeof(unsigned int) * meta.key_num);
     bpm->markDirty(index);
 }
@@ -788,4 +842,78 @@ int PageNode::get_index_in_parent() {
         }
     }
     return index;
+}
+
+Index::Index(std::string _name, std::vector<std::string> _keys) {
+    name = std::move(_name);
+    keys = std::move(_keys);
+    m = (PAGE_SIZE - 64) / (4 * (keys.size() + 1));
+    key_num = keys.size();
+    root_page_id = 0;
+    page_num = 1;
+}
+
+void Index::write_file() const{
+    int index;
+    // buf using 4 bytes as a unit
+    BufType buf = bpm->allocPage(fileID, 0, index, false);
+    // name
+    auto name_length = (unsigned int) (name.size());
+    buf[0] = name_length;
+    memcpy(buf + 1, name.c_str(), name_length);
+    int offset = (name_length + 3) / 4 * 4 + 1;
+    // keys
+    buf[offset] = key_num;
+    offset += 1;
+    for (const auto &key: keys) {
+        auto key_length = (unsigned int) (key.size());
+        buf[offset] = key_length;
+        memcpy(buf + offset + 1, key.c_str(), key_length);
+        offset += (key_length + 3) / 4 * 4 + 1;
+    }
+    // m
+    buf[offset] = m;
+    offset += 1;
+    // key_num
+    buf[offset] = key_num;
+    offset += 1;
+    // root_page_id
+    buf[offset] = root_page_id;
+    offset += 1;
+    // page_num
+    buf[offset] = page_num;
+    offset += 1;
+    bpm->markDirty(index);
+}
+
+void Index::read_file() {
+    int index;
+    int offset = 0;
+    // buf using 4 bytes as a unit
+    BufType buf = bpm->getPage(fileID, 0, index);
+    // name
+    auto name_length = buf[0];
+    name = std::string((char *) (buf + 1), name_length);
+    offset += (name_length + 3) / 4 * 4 + 1;
+    // keys
+    key_num = buf[offset];
+    offset += 1;
+    for (int i = 0; i < key_num; ++i) {
+        auto key_length = buf[offset];
+        offset += 1;
+        keys.emplace_back((char *) (buf + offset), key_length);
+        offset += (key_length + 3) / 4 * 4;
+    }
+    // m
+    m = buf[offset];
+    offset += 1;
+    // key_num
+    key_num = buf[offset];
+    offset += 1;
+    // root_page_id
+    root_page_id = buf[offset];
+    offset += 1;
+    // page_num
+    page_num = buf[offset];
+    offset += 1;
 }

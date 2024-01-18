@@ -18,13 +18,19 @@ class PageNode;
 
 class Index{
 public:
+    // header
+    // first page is metadata
+    std::string name;
     std::vector<std::string> keys;
-    int fileID = -1;
     int m;
     int key_num;
     int root_page_id;
-    // first page is metadata
     int page_num;
+    // temp
+    int fileID = -1;
+    std::vector<int> key_i;
+    void write_file() const;
+    void read_file();
     PageNode page_to_node(int page_id);
     void records_to_buf(unsigned int* buf, const std::vector<IndexRecord>& record) const;
 
@@ -32,6 +38,9 @@ public:
     std::optional<int> search_record(const Key& key);
     void insert(const Key &key, int record_id);
     void remove(const Key& key);
+
+    Index(std::string name, std::vector<std::string> keys);
+    Index()= default;
 };
 
 class PageNode{
