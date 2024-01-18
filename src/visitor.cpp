@@ -320,6 +320,7 @@ std::any Visitor::visitSelect_table(SQLParser::Select_tableContext *context) {
                     // then it's a select statement
                     std::any result = clause->accept(this);
                     auto ptr = std::any_cast<std::shared_ptr<Where>>(result);
+                    if(ptr->column.size() == 1){ ptr->column = {table.name, ptr->column[0]}; }
                     content.erase(std::remove_if(content.begin(), content.end(), [ptr](optional<Record> &record) {
                                       if (!record.has_value()) return false;
                                       return !ptr->choose(record.value());

@@ -79,7 +79,7 @@ void Table::write_file() {
     auto name_length = (unsigned int) (name.size());
     buf[0] = name_length;
     memcpy(buf + 1, name.c_str(), name_length);
-    offset += name_length + 1;
+    offset += (name_length + 3) / 4 *4 + 1;
     // fields
     auto field_num = (unsigned int) (fields.size());
     buf[offset] = field_num;
@@ -89,7 +89,7 @@ void Table::write_file() {
         auto field_name_length = (unsigned int) (field.name.size());
         buf[offset] = field_name_length;
         memcpy(buf + offset + 1, field.name.c_str(), field_name_length);
-        offset += field_name_length + 1;
+        offset += (field_name_length + 3) / 4 *4 + 1;
         // type
         buf[offset] = (unsigned int) (field.type);
         offset += 1;
@@ -144,7 +144,7 @@ void Table::read_file() {
     // name
     auto name_length = buf[0];
     name = std::string((char *) (buf + 1), name_length);
-    offset += name_length + 1;
+    offset += (name_length + 3) / 4 * 4 + 1;
     // fields
     auto field_num = buf[offset];
     offset += 1;
@@ -153,7 +153,7 @@ void Table::read_file() {
         // name
         auto field_name_length = buf[offset];
         field.name = std::string((char *) (buf + offset + 1), field_name_length);
-        offset += field_name_length + 1;
+        offset += (field_name_length + 3) / 4 * 4 + 1;
         // type
         field.type = (FieldType) (buf[offset]);
         offset += 1;
