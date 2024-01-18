@@ -2,10 +2,10 @@
 // Created by 胡 on 2023/12/30.
 //
 #include "parser/visitor.h"
+#include "utils/Selector.h"
 #include "utils/error.h"
 #include "utils/output.h"
 #include <filesystem>
-#include "utils/Selector.h"
 
 using namespace std;
 Database *current_db = nullptr;
@@ -270,7 +270,6 @@ std::any Visitor::visitLoad_table(SQLParser::Load_tableContext *context) {
         if (flag) break;
     }
     file.close();
-    table.write_file();
     output_sys.output({{"rows"}, {to_string(count)}});
     return {};
 }
@@ -287,38 +286,62 @@ std::any Visitor::visitSelect_table(SQLParser::Select_tableContext *context) {
         if (table_index == -1) {
             throw Error("TABLE DOESN'T EXIST");
         }
-        vector<Record> content;
         auto &table = current_db->tables[table_index];
+        int num = (int) table.record_num;
+        vector<string> column_name;
+        vector<int> selected_index;
         if (selectors.empty()) {
-            content = table.all_records();
-        } else {
-            vector<string> columns;
+            vector<string> column_name;
+            column_name.reserve(table.fields.size());
+            for (auto &field: table.fields) {
+                column_name.push_back(field.name);
+            }
+            output_sys.output({column_name});
+        }else{
             for (auto &selector: selectors) {
                 if (selector->column()) {
                     auto column = selector->column()->getText();
-                    columns.push_back(column);
+                    column_name.push_back(column);
+                    selected_index.push_back(current_db->get_column_index({table.name, column}));
                 } else {
                     throw UnimplementedError();
                 }
             }
-//            content = table.select_records(columns);
+            output_sys.output({column_name});
         }
-        if (context->where_and_clause()){
-            auto where_and_clause = context->where_and_clause();
-            auto where_clause = where_and_clause->where_clause();
-            for (auto &clause: where_clause) {
-                // check type, if type is Where_operator_selectContext
-                // then it's a select statement
-                std::any result = clause->accept(this);
-                auto ptr = std::any_cast<std::shared_ptr<Where>>(result);
-                content.erase(std::remove_if(content.begin(), content.end(), [ptr](Record &record) {
-                    return !ptr->choose(record);
-                }), content.end());
-
+        int chunk_size = 1024;
+        for (int i = 0; i < num; i += chunk_size) {
+            auto content = table.get_record_range({i, min(i + chunk_size - 1, num - 1)});
+            if (context->where_and_clause()) {
+                auto where_and_clause = context->where_and_clause();
+                auto where_clause = where_and_clause->where_clause();
+                for (auto &clause: where_clause) {
+                    // check type, if type is Where_operator_selectContext
+                    // then it's a select statement
+                    std::any result = clause->accept(this);
+                    auto ptr = std::any_cast<std::shared_ptr<Where>>(result);
+                    content.erase(std::remove_if(content.begin(), content.end(), [ptr](Record &record) {
+                                      return !ptr->choose(record);
+                                  }),
+                                  content.end());
+                }
+            }
+            if (selectors.empty()) {
+                output_sys.output(table.records_to_str(content));
+            }else{
+                auto output = table.records_to_str(content);
+                vector<vector<string>> selected_content;
+                for (auto &record: output) {
+                    vector<string> selected_record;
+                    selected_record.reserve(selected_index.size());
+                    for (auto &index: selected_index) {
+                        selected_record.push_back(record[index]);
+                    }
+                    selected_content.push_back(selected_record);
+                }
+                output_sys.output(selected_content);
             }
         }
-        output_sys.output({{"TABLE"}, {table_name->getText()}});
-        output_sys.output(table.records_to_str(content));
     }
     return {};
 }
@@ -329,8 +352,45 @@ std::any Visitor::visitWhere_operator_expression(SQLParser::Where_operator_expre
         operator_expression->column.push_back(column->getText());
     }
     operator_expression->op = context->operator_()->getText();
-    if(auto value = context->expression()->value()){
-        operator_expression->value = value->getText();
+    if (auto value = context->expression()->value()) {
+        if (value->String()) {
+            operator_expression->value = value->getText().substr(1, value->getText().size() - 2);
+        } else {
+            operator_expression->value = value->getText();
+        }
     }
     return where;
+}
+std::any Visitor::visitInsert_into_table(SQLParser::Insert_into_tableContext *context) {
+    auto table_name = context->Identifier()->getText();
+    int table_index = current_db->get_table_index(table_name);
+    if (table_index == -1) {
+        throw Error("TABLE DOESN'T EXIST");
+    }
+    auto &table = current_db->tables[table_index];
+    auto value_lists = context->value_lists()->value_list();
+    for (auto & value_list: value_lists){
+        int n = value_list->value().size();
+        if (n != table.fields.size()) {
+            throw Error("VALUE NUMBER DOESN'T MATCH");
+        }
+        vector<Value> record;
+        for (int i = 0; i < n; ++i) {
+            auto value = value_list->value()[i];
+            switch (table.fields[i].type) {
+                case FieldType::INT:
+                    record.emplace_back(std::stoi(value->getText()));
+                    break;
+                case FieldType::FLOAT:
+                    record.emplace_back(std::stod(value->getText()));
+                    break;
+                case FieldType::VARCHAR:
+                    record.emplace_back(value->getText().substr(1, value->getText().size() - 2));
+                    break;
+            }
+        }
+        table.add_record(record);
+    }
+    output_sys.output({{"rows"}, {to_string(value_lists.size())}});
+    return std::any();
 }

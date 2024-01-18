@@ -28,8 +28,8 @@ bool OperatorExpression::choose(Record record) {
             }
         }
         else if (record_value.index() == 1){
-            float record_float = std::get<float>(record_value);
-            float value_float = std::stof(value);
+            auto record_float = std::get<double>(record_value);
+            double value_float = std::stod(value);
             if (op == ">") {
                 return record_float > value_float;
             } else if (op == "<") {
@@ -41,8 +41,24 @@ bool OperatorExpression::choose(Record record) {
             } else {
                 throw Error("Unknown operator: " + op);
             }
-        }
-        else {
+        }else if (record_value.index() == 2){
+            std::string record_string = std::get<std::string>(record_value);
+            if (op == ">") {
+                return record_string > value;
+            } else if (op == "<") {
+                return record_string < value;
+            } else if (op == ">=") {
+                if (record_string >= value){
+                    return true;
+                } else {
+                    return false;
+                }
+            } else if (op == "<=") {
+                return record_string <= value;
+            } else {
+                throw Error("Unknown operator: " + op);
+            }
+        }else {
             throw Error("Unknown operator: " + op);
         }
     }

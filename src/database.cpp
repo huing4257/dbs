@@ -8,6 +8,7 @@
 #include "utils/error.h"
 #include <algorithm>
 #include <cstring>
+#include <cmath>
 
 auto fm = std::make_unique<FileManager>();
 auto bpm = std::make_unique<BufPageManager>(fm.get());
@@ -106,13 +107,13 @@ void Table::write_file() {
                 case FieldType::INT: {
                     int value = std::get<int>(field.default_value.value());
                     memcpy(buf + offset, &value, sizeof(int));
-                    offset += sizeof(int);
+                    offset += sizeof(int) / 4;
                     break;
                 }
                 case FieldType::FLOAT: {
-                    float value = std::get<float>(field.default_value.value());
-                    memcpy(buf + offset, &value, sizeof(float));
-                    offset += sizeof(float);
+                    auto value = std::get<double>(field.default_value.value());
+                    memcpy(buf + offset, &value, sizeof(double));
+                    offset += sizeof(double) / 4;
                     break;
                 }
                 case FieldType::VARCHAR: {
@@ -121,7 +122,7 @@ void Table::write_file() {
                     memcpy(buf + offset, &value_length, sizeof(unsigned int));
                     offset += sizeof(unsigned int);
                     memcpy(buf + offset, value.c_str(), value_length);
-                    offset += value_length;
+                    offset += (value_length + 3) / 4;
                     break;
                 }
             }
@@ -169,14 +170,14 @@ void Table::read_file() {
                 case FieldType::INT: {
                     int value;
                     memcpy(&value, buf + offset, sizeof(int));
-                    offset += sizeof(int);
+                    offset += sizeof(int) / 4;
                     field.default_value = value;
                     break;
                 }
                 case FieldType::FLOAT: {
-                    float value;
-                    memcpy(&value, buf + offset, sizeof(float));
-                    offset += sizeof(float);
+                    double value;
+                    memcpy(&value, buf + offset, sizeof(double));
+                    offset += sizeof(double) / 4;
                     field.default_value = value;
                     break;
                 }
@@ -185,7 +186,7 @@ void Table::read_file() {
                     memcpy(&value_length, buf + offset, sizeof(unsigned int));
                     offset += sizeof(unsigned int);
                     field.default_value = std::string((char *) (buf + offset), value_length);
-                    offset += value_length;
+                    offset += (value_length + 3) / 4;
                     break;
                 }
             }
@@ -215,10 +216,10 @@ bool Table::construct() {
                 record_length += sizeof(int);
                 break;
             case FieldType::VARCHAR:
-                record_length += (field.length + 3) / 4 * 4;
+                record_length += (field.length + 1 + 3) / 4 * 4;
                 break;
             case FieldType::FLOAT:
-                record_length += sizeof(float);
+                record_length += sizeof(double);
                 break;
         }
     }
@@ -252,16 +253,16 @@ void Table::record_to_buf(const vector<Value> &record, unsigned int *buf) const 
                 break;
             }
             case FieldType::FLOAT: {
-                auto value = std::get<float>(record[i]);
-                memcpy(buf + offset, &value, sizeof(float));
-                offset += sizeof(float) / 4;
+                auto value = std::get<double>(record[i]);
+                memcpy(buf + offset, &value, sizeof(double));
+                offset += sizeof(double) / 4;
                 break;
             }
             case FieldType::VARCHAR: {
                 auto value = std::get<std::string>(record[i]);
-                auto a = buf + offset;
                 memcpy(buf + offset, value.c_str(), value.size());
-                offset += (fields[i].length + 3) / 4;
+                memcpy((unsigned char *) (buf + offset) + value.size(), "\0", 1);
+                offset += (fields[i].length + 1 + 3) / 4;
                 break;
             }
         }
@@ -278,12 +279,15 @@ std::vector<Value> Table::buf_to_record(const unsigned int *buf) const {
                 memcpy(&value, buf + offset, sizeof(int));
                 offset += sizeof(int) / 4;
                 record.emplace_back(value);
+                if (value == 1654) {
+                    int a = 0;
+                }
                 break;
             }
             case FieldType::FLOAT: {
-                float value;
-                memcpy(&value, buf + offset, sizeof(float));
-                offset += sizeof(float) / 4;
+                double value;
+                memcpy(&value, buf + offset, sizeof(double));
+                offset += sizeof(double) / 4;
                 record.emplace_back(value);
                 break;
             }
@@ -291,7 +295,7 @@ std::vector<Value> Table::buf_to_record(const unsigned int *buf) const {
                 // use length to store varchar
                 unsigned int value_length = field.length;
                 string value((char *) (buf + offset));
-                offset += (int) ((value_length + 3) / 4);
+                offset += (int) ((value_length + 1 + 3) / 4);
                 record.emplace_back(value);
                 break;
             }
@@ -301,7 +305,7 @@ std::vector<Value> Table::buf_to_record(const unsigned int *buf) const {
 }
 
 //todo: to be optimized
-vector<vector<Value>> Table::get_record_range(std::pair<int,int> range) const {
+vector<vector<Value>> Table::get_record_range(std::pair<int, int> range) const {
     int index;
     int start = range.first;
     int end = range.second;
@@ -316,7 +320,7 @@ vector<vector<Value>> Table::get_record_range(std::pair<int,int> range) const {
         int page_id = (i + 1) / record_num_per_page + 1;
         int offset = i % record_num_per_page;
         BufType buf = bpm->getPage(fileID, page_id, index);
-        buf = buf + offset * record_length /4 + PAGE_HEADER/4;
+        buf = buf + offset * record_length / 4 + PAGE_HEADER / 4;
         records.push_back(buf_to_record(buf));
     }
     return records;
@@ -337,7 +341,7 @@ bool Table::add_record(const vector<Value> &record) {
     int page_id = (record_num + 1) / record_num_per_page + 1;
     int offset = (record_num) % record_num_per_page;
     BufType buf = bpm->getPage(fileID, page_id, index);
-    buf = buf + offset * record_length + PAGE_HEADER;
+    buf = buf + offset * record_length/4 + PAGE_HEADER/4;
     record_to_buf(record, buf);
     bpm->markDirty(index);
     record_num++;
@@ -371,10 +375,23 @@ vector<string> Table::record_to_str(const vector<Value> &record) const {
         switch (fields[i].type) {
             case FieldType::INT: {
                 strs.emplace_back(std::to_string(std::get<int>(record[i])));
+                if (std::get<int>(record[i]) == 1654) {
+                    int a = 0;
+                }
                 break;
             }
             case FieldType::FLOAT: {
-                strs.emplace_back(std::to_string(std::get<float>(record[i])));
+                auto f = std::get<double>(record[i]);
+                // 保留两位小数，四舍五入
+                f = f * 100;
+                f = round(f);
+                f = f / 100;
+                auto res = std::to_string(f);
+                size_t dotPos = res.find('.');
+                if (dotPos != std::string::npos && res.size() > dotPos + 3) {
+                    res.erase(dotPos + 3, std::string::npos);
+                }
+                strs.emplace_back(res);
                 break;
             }
             case FieldType::VARCHAR: {

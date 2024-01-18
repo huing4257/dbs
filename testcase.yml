@@ -5,5 +5,5 @@ run:
   commands: ./build/dbs
   flags:
     - no_use
-    - data
+    - query
 

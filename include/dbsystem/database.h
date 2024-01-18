@@ -22,7 +22,7 @@ enum class FieldType {
     VARCHAR = 2
 };
 
-using Value = std::variant<int, float, std::string>;
+using Value = std::variant<int, double, std::string>;
 
 typedef std::vector<Value> Record;
 
@@ -30,7 +30,7 @@ struct StringVisitor{
     std::string operator()(int value) const {
         return std::to_string(value);
     }
-    std::string operator()(float value) const {
+    std::string operator()(double value) const {
         auto str = std::to_string(value);
         return str.substr(0, str.find('.') + 2);
     }
@@ -66,7 +66,7 @@ class Table {
 private:
     void record_to_buf(const std::vector<Value> &record, unsigned int *buf) const;
     std::vector<Value> buf_to_record(const unsigned int *buf) const;
-    [[nodiscard]] std::vector<std::vector<Value>> get_record_range(std::pair<int,int>) const;
+
 public:
     std::vector<int> primary_key_index;
     // using byte as unit, align to 32 byte
@@ -98,7 +98,7 @@ public:
         }
         return res;
     }
-
+    [[nodiscard]] std::vector<std::vector<Value>> get_record_range(std::pair<int,int>) const;
 
     [[nodiscard]] std::vector<std::vector<Value>> all_records() const{
         return get_record_range({0, record_num-1});
