@@ -89,6 +89,17 @@ public:
     bool construct();
     void update() const;
     void add_index(const std::string& index_name, const std::vector<std::string>& keys);
+    void fill_index_ki(Index &i){
+        i.key_i.clear();
+        for (auto &key : i.keys) {
+            for (int j = 0; j < fields.size(); j++) {
+                if (fields[j].name == key) {
+                    i.key_i.push_back(j);
+                    break;
+                }
+            }
+        }
+    }
 
     bool add_record(const std::vector<Value> &record);
     [[nodiscard]] std::vector<Value> str_to_record(const std::vector<std::string> &line) const;

@@ -4,7 +4,6 @@
 
 #ifndef DBS_INDEX_H
 #define DBS_INDEX_H
-#include "dbsystem/database.h"
 
 /*
  * IndexNode for Btree
@@ -26,12 +25,13 @@ public:
     int key_num;
     int root_page_id;
     int page_num;
+    bool is_unique;
     // temp
     int fileID = -1;
     std::vector<int> key_i;
     void write_file() const;
     void read_file();
-    PageNode page_to_node(int page_id);
+    PageNode page_to_node(unsigned int page_id);
     void records_to_buf(unsigned int* buf, const std::vector<IndexRecord>& record) const;
 
     int search_page_node(const Key& key);
@@ -39,13 +39,15 @@ public:
     void insert(const Key &key, int record_id);
     void remove(const Key& key);
 
-    Index(std::string name, std::vector<std::string> keys);
+    Index(std::string name, std::vector<std::string> keys, bool unique);
     Index()= default;
+    void init();
+    void draw_tree();
 };
 
 class PageNode{
 public:
-    int page_id;
+    unsigned int page_id;
     Index& meta;
     // header
     bool is_leaf;

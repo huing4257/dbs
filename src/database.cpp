@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <cstring>
 #include <utility>
+#include <queue>
 
 auto fm = std::make_unique<FileManager>();
 auto bpm = std::make_unique<BufPageManager>(fm.get());
@@ -36,11 +37,12 @@ void Database::use_database() {
         table.construct();
         tables.push_back(table);
         auto tname = tables.back().name;
-        for (auto index:tables.back()._index){
+        for (auto index: tables.back()._index) {
             auto is_open = fm->openFile(("data/base/" + name + "/" + tname + "." + index.name + ".index").c_str(),
                                         index.fileID);
             if (!is_open) throw Error("INDEX FILE OPEN FAILED");
             index.read_file();
+            table.fill_index_ki(index);
         }
     }
 }
@@ -258,11 +260,11 @@ void Table::read_file() {
     auto key_num = buf[offset];
     offset += 1;
     auto key_name_length = buf[offset];
-    offset ++;
-    if (key_name_length != 0){
-        primary_key.name = string((char *)(buf + offset),key_name_length);
+    offset++;
+    if (key_name_length != 0) {
+        primary_key.name = string((char *) (buf + offset), key_name_length);
     }
-    for (int i = 0; i < key_num; ++i){
+    for (int i = 0; i < key_num; ++i) {
         int value_length = (int) buf[offset];
         offset += 1;
         primary_key.keys.emplace_back((char *) (buf + offset), value_length);
@@ -352,12 +354,14 @@ bool Table::construct() {
     return true;
 }
 
-void Table::add_index(const string& index_name, const vector<string>& keys) {
-    _index.emplace_back(index_name,keys);
+void Table::add_index(const string &index_name, const vector<string> &keys) {
+    _index.emplace_back(index_name, keys, false);
     fm->createFile(("data/base/" + current_db->name + "/" + name + "." + index_name + ".index").c_str());
     fm->openFile(("data/base/" + current_db->name + "/" + name + "." + index_name + ".index").c_str(), _index.back().fileID);
     _index.back().write_file();
+    _index.back().init();
     write_file();
+    fill_index_ki(_index.back());
     // todo: add index to index file
     unsigned int chunk_size = 1024;
     for (int i = 0; i < record_num; i += chunk_size) {
@@ -365,15 +369,16 @@ void Table::add_index(const string& index_name, const vector<string>& keys) {
         for (int j = 0; j < content.size(); ++j) {
             if (content[j]) {
                 Key key;
-                for (auto _i: _index.back().key_i){
+                for (auto _i: _index.back().key_i) {
                     try {
                         int value = std::get<int>(content[j].value()[_i]);
                         key.push_back(value);
-                    } catch (const std::bad_variant_access& e) {
+                    } catch (const std::bad_variant_access &e) {
                         throw Error("INDEX TYPE DOESN'T MATCH");
                     }
                 }
                 _index.back().insert(key, i + j);
+                _index.back().draw_tree();
             }
         }
     }
@@ -589,6 +594,20 @@ void PageNode::insert(const Key &key, int id) {
     BufType buf = bpm->getPage(meta.fileID, page_id, index);
 
     auto records = to_vec();
+    if (records.empty() or key>records.back().first){
+        push_back({key,id});
+        if ( parent_page == 0 ) return;
+        // update parent and ancestor
+        auto parent_page_node = make_shared<PageNode>(meta.page_to_node((int) parent_page));
+        parent_page_node->update_record(get_index_in_parent(), key);
+        while (parent_page_node->parent_page != 0){
+            auto i = parent_page_node->get_index_in_parent();
+            parent_page_node = make_shared<PageNode>(meta.page_to_node((int) parent_page_node->parent_page));
+            parent_page_node->update_record(i, key);
+            parent_page_node->update();
+        }
+        return;
+    }
     auto it = std::lower_bound(records.begin(), records.end(),
                                key, [](const auto &record, const Key &k) {
                                    return record.first < k;
@@ -654,46 +673,49 @@ void PageNode::push_back(IndexRecord record) {
     auto buf = bpm->getPage(meta.fileID, page_id, index);
     buf += 5 + record_num * (meta.key_num + 1);
     meta.records_to_buf(buf, {std::move(record)});
-    bpm->markDirty(index);
     record_num++;
+    update();
 }
 
 void PageNode::split() {
     PageNode new_page = {
-            meta.page_num, meta, is_leaf, pred_page, succ_page, parent_page, 0};
+            (unsigned int)meta.page_num, meta, is_leaf, page_id, succ_page, parent_page, 0};
     meta.page_num += 1;
     // copy second half of records to new page
     auto records = to_vec();
-    int i = (int) (records.size() / 2);
-    for (; i < records.size(); ++i) {
+    int left_num = (int) (records.size() / 2);
+    for (int i = left_num; i < records.size(); ++i) {
         new_page.push_back({records[i].first, records[i].second});
     }
     // update pred_page and succ_page
-    new_page.pred_page = page_id;
-    new_page.succ_page = succ_page;
     if (succ_page != 0) {
         PageNode succ_page_node = meta.page_to_node((int) succ_page);
         succ_page_node.pred_page = new_page.page_id;
         succ_page_node.update();
     }
     succ_page = new_page.page_id;
+    record_num = left_num;
+    update();
     // update parent_page
     if (parent_page == 0) {
         // create new root
         PageNode new_root = {
-                meta.page_num, meta, false, 0, 0, 0, 0};
+                (unsigned int)meta.page_num, meta, false, 0, 0, 0, 0};
+        new_root.update();
         meta.page_num++;
-        new_root.insert(records[i - 1].first, page_id);
-        new_root.insert(new_page.to_vec()[0].first, new_page.page_id);
+        new_root.insert(records[left_num - 1].first, page_id);
+        new_root.insert(records[records.size() - 1].first, new_page.page_id);
         meta.root_page_id = new_root.page_id;
         new_page.parent_page = new_root.page_id;
         parent_page = new_root.page_id;
         new_root.update();
         new_page.update();
+        update();
         return;
     }
     PageNode parent_page_node = meta.page_to_node((int) parent_page);
-    parent_page_node.insert(records[i - 1].first, new_page.page_id);
+    parent_page_node.update_record(get_index_in_parent(), records[left_num - 1].first);
+    parent_page_node.insert(records.back().first, new_page.page_id);
     parent_page_node.update();
     new_page.update();
 }
@@ -733,7 +755,7 @@ bool PageNode::borrow() {
 void PageNode::update_record(int i, const Key &key) const {
     int index;
     auto buf = bpm->getPage(meta.fileID, page_id, index);
-    buf = buf + 64 + i * (meta.key_num + 1);
+    buf = buf + 5 + i * (meta.key_num + 1);
     memcpy(buf, key.data(), sizeof(unsigned int) * meta.key_num);
     bpm->markDirty(index);
 }
@@ -768,7 +790,7 @@ void Index::records_to_buf(BufType buf, const std::vector<IndexRecord> &record) 
     }
 }
 
-PageNode Index::page_to_node(int page_id) {
+PageNode Index::page_to_node(unsigned int page_id) {
     int index;
     BufType buf = bpm->getPage(fileID, page_id, index);
     bool is_leaf = buf[0];
@@ -794,7 +816,11 @@ int Index::search_page_node(const Key &key) {
                 break;
             }
         }
-        page_id = records[i].second;
+        if (i == records.size()) {
+            page_id = records.back().second;
+        } else {
+            page_id = records[i].second;
+        }
     }
 }
 
@@ -807,7 +833,7 @@ optional<int> Index::search_record(const Key &key) {
 void Index::insert(const Key &key, int record_id) {
     auto page_id = search_page_node(key);
     auto page = make_shared<PageNode>(page_to_node(page_id));
-    if (page->search(key)) {
+    if (page->search(key) and is_unique) {
         throw Error("DUPLICATE KEY");
     }
     page->insert(key, record_id);
@@ -844,16 +870,22 @@ int PageNode::get_index_in_parent() {
     return index;
 }
 
-Index::Index(std::string _name, std::vector<std::string> _keys) {
+Index::Index(std::string _name, std::vector<std::string> _keys, bool _is_unique) {
     name = std::move(_name);
     keys = std::move(_keys);
-    m = (PAGE_SIZE - 64) / (4 * (keys.size() + 1));
+//    m = (PAGE_SIZE - 5) / (4 * (keys.size() + 1));
+//    m = (m/2)*2 - 1;
+//    if (m < 3) {
+//        throw Error("KEYS TOO LONG");
+//    }
+    m = 3;
     key_num = keys.size();
-    root_page_id = 0;
+    root_page_id = 1;
     page_num = 1;
+    is_unique = _is_unique;
 }
 
-void Index::write_file() const{
+void Index::write_file() const {
     int index;
     // buf using 4 bytes as a unit
     BufType buf = bpm->allocPage(fileID, 0, index, false);
@@ -879,6 +911,8 @@ void Index::write_file() const{
     offset += 1;
     // root_page_id
     buf[offset] = root_page_id;
+    offset += 1;
+    buf[offset] = is_unique;
     offset += 1;
     // page_num
     buf[offset] = page_num;
@@ -913,7 +947,54 @@ void Index::read_file() {
     // root_page_id
     root_page_id = buf[offset];
     offset += 1;
+    is_unique = buf[offset];
+    offset += 1;
     // page_num
     page_num = buf[offset];
     offset += 1;
+}
+
+void Index::init() {
+    page_num++;
+    PageNode root = {1, *this, true, 0, 0, 0, 0};
+    root.update();
+}
+
+void Index::draw_tree() {
+    // to cerr
+    cerr << "------- tree -------" << endl;
+    std::queue<int> q;
+    q.push(root_page_id);
+    int level = 0;
+    while (!q.empty()) {
+        int nodes_in_current_level = q.size();
+        cerr << "Level " << level << ": \n";  // 输出层序号
+        while (nodes_in_current_level > 0) {
+            int page_id = q.front();
+            q.pop();
+            PageNode node = page_to_node(page_id);
+            auto records = node.to_vec();
+
+            cerr << "page_id: " << page_id << " is_leaf: " << node.is_leaf << " pred_page: " << node.pred_page
+                 << " succ_page: " << node.succ_page << " parent_page: " << node.parent_page << " record_num: "
+                 << node.record_num << endl;
+            cerr << "records: ";
+            for (const auto &record: records) {
+                cerr << "(";
+                for (const auto &key: record.first) {
+                    cerr << key << " ";
+                }
+                cerr << ", " << record.second << ") ";
+            }
+            cerr << "\n";  // 在记录输出后增加一些空格分隔
+            if (!node.is_leaf) {
+                for (const auto &record: records) {
+                    q.push(record.second);
+                }
+            }
+            --nodes_in_current_level;
+        }
+        cerr << endl;
+        ++level;
+    }
 }
