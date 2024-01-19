@@ -14,6 +14,7 @@ like_string
  */
 #include <string>
 #include <vector>
+#include <variant>
 
 using Value = std::variant<int, double, std::string>;
 typedef std::vector<Value> Record;
