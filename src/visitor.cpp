@@ -231,13 +231,13 @@ std::any Visitor::visitDescribe_table(SQLParser::Describe_tableContext *context)
             line += ");\n";
         }
     }
-    if (!table._index.empty()){
-        for (auto &index: table._index){
+    if (!table._index.empty()) {
+        for (auto &index: table._index) {
             if (index.name == "primary") continue;
             line += "INDEX ";
             line += index.name;
             line += "(";
-            for (auto &key: index.keys){
+            for (auto &key: index.keys) {
                 line += (key + ",");
             }
             line.pop_back();
@@ -292,6 +292,20 @@ std::any Visitor::visitSelect_table_(SQLParser::Select_table_Context *context) {
     return visitChildren(context);
 }
 
+void projection_and_output(const Table &table, const vector<optional<Record>> &content, vector<int> selected_index) {
+    auto output = table.records_to_str(content);
+    vector<vector<string>> selected_content;
+    for (auto &record: output) {
+        vector<string> selected_record;
+        selected_record.reserve(selected_index.size());
+        for (auto &index: selected_index) {
+            selected_record.push_back(record[index]);
+        }
+        selected_content.push_back(selected_record);
+    }
+    output_sys.output(selected_content);
+};
+
 std::any Visitor::visitSelect_table(SQLParser::Select_tableContext *context) {
     auto selectors = context->selectors()->selector();
     auto table_names = context->identifiers()->Identifier();
@@ -305,13 +319,13 @@ std::any Visitor::visitSelect_table(SQLParser::Select_tableContext *context) {
         vector<string> column_name;
         vector<int> selected_index;
         if (selectors.empty()) {
-            vector<string> column_name;
             column_name.reserve(table.fields.size());
-            for (auto &field: table.fields) {
-                column_name.push_back(field.name);
+            for (int i = 0; i < table.fields.size(); i++) {
+                column_name.push_back(table.fields[i].name);
+                selected_index.push_back(i);
             }
             output_sys.output({column_name});
-        }else{
+        } else {
             for (auto &selector: selectors) {
                 if (selector->column()) {
                     auto column = selector->column()->getText();
@@ -324,43 +338,58 @@ std::any Visitor::visitSelect_table(SQLParser::Select_tableContext *context) {
             output_sys.output({column_name});
         }
         int chunk_size = 1024;
+        auto where_and_clause = context->where_and_clause();
+        vector<shared_ptr<Where>> checker;
+        if (where_and_clause) {
+            auto where_clause = where_and_clause->where_clause();
+            // pre filter using index
+            for (auto &clause: where_clause) {
+                std::any result = clause->accept(this);
+                auto ptr = std::any_cast<std::shared_ptr<Where>>(result);
+                checker.push_back(ptr);
+            }
+        }
+        optional<vector<int>> rid;
+        for (auto &index: table._index) {
+            auto res = index.check(checker);
+            if (res) {
+                rid = res;
+                break;
+            }
+        }
+        vector<optional<Record>> content;
+        // filter
+        if (rid) {
+            for (auto &i: rid.value()) {
+                auto record = table.get_record_range({i, i})[0];
+                if (!record.has_value()) continue;
+                vector<string> selected_record;
+                selected_record.reserve(selected_index.size());
+
+                output_sys.output({selected_record});
+            }
+            return {};
+        }
         for (int i = 0; i < num; i += chunk_size) {
-            auto content = table.get_record_range({i, min(i + chunk_size - 1, num - 1)});
-            if (context->where_and_clause()) {
-                auto where_and_clause = context->where_and_clause();
-                auto where_clause = where_and_clause->where_clause();
-                for (auto &clause: where_clause) {
-                    // check type, if type is Where_operator_selectContext
-                    // then it's a select statement
-                    std::any result = clause->accept(this);
-                    auto ptr = std::any_cast<std::shared_ptr<Where>>(result);
-                    if(ptr->column.size() == 1){ ptr->column = {table.name, ptr->column[0]}; }
-                    content.erase(std::remove_if(content.begin(), content.end(), [ptr](optional<Record> &record) {
+            content = table.get_record_range({i, min(i + chunk_size - 1, num - 1)});
+            if (!checker.empty()) {
+                for (auto &ch: checker) {
+                    if (ch->column.size() == 1) { ch->column = {table.name, ch->column[0]}; }
+                    content.erase(std::remove_if(content.begin(), content.end(), [ch](optional<Record> &record) {
                                       if (!record.has_value()) return false;
-                                      return !ptr->choose(record.value());
+                                      return !ch->choose(record.value());
                                   }),
                                   content.end());
                 }
             }
-            if (selectors.empty()) {
-                output_sys.output(table.records_to_str(content));
-            }else{
-                auto output = table.records_to_str(content);
-                vector<vector<string>> selected_content;
-                for (auto &record: output) {
-                    vector<string> selected_record;
-                    selected_record.reserve(selected_index.size());
-                    for (auto &index: selected_index) {
-                        selected_record.push_back(record[index]);
-                    }
-                    selected_content.push_back(selected_record);
-                }
-                output_sys.output(selected_content);
-            }
         }
+        // projection
+        projection_and_output(table, content, selected_index);
     }
     return {};
 }
+
+
 std::any Visitor::visitWhere_operator_expression(SQLParser::Where_operator_expressionContext *context) {
     std::shared_ptr<Where> where = std::make_shared<OperatorExpression>();
     auto operator_expression = std::dynamic_pointer_cast<OperatorExpression>(where);
@@ -385,7 +414,7 @@ std::any Visitor::visitInsert_into_table(SQLParser::Insert_into_tableContext *co
     }
     auto &table = current_db->tables[table_index];
     auto value_lists = context->value_lists()->value_list();
-    for (auto & value_list: value_lists){
+    for (auto &value_list: value_lists) {
         int n = value_list->value().size();
         if (n != table.fields.size()) {
             throw Error("VALUE NUMBER DOESN'T MATCH");
@@ -419,7 +448,7 @@ std::any Visitor::visitUpdate_table(SQLParser::Update_tableContext *context) {
     auto &table = current_db->tables[table_index];
     auto set_clause = context->set_clause();
     int n = set_clause->Identifier().size();
-    if (n != set_clause->value().size() || n!= set_clause->EqualOrAssign().size()) {
+    if (n != set_clause->value().size() || n != set_clause->EqualOrAssign().size()) {
         throw Error("VALUE NUMBER DOESN'T MATCH");
     }
     auto where_clause = context->where_and_clause();
@@ -434,10 +463,10 @@ std::any Visitor::visitUpdate_table(SQLParser::Update_tableContext *context) {
     int count = 0;
     for (int i = 0; i < table.record_num; ++i) {
         bool flag = true;
-        auto record = table.get_record_range({i,i})[0];
+        auto record = table.get_record_range({i, i})[0];
         if (!record.has_value()) continue;
         for (auto &ptr: checker) {
-            if(ptr->column.size() == 1){ ptr->column = {table.name, ptr->column[0]}; }
+            if (ptr->column.size() == 1) { ptr->column = {table.name, ptr->column[0]}; }
             if (!ptr->choose(record.value())) {
                 flag = false;
                 break;
@@ -491,10 +520,10 @@ std::any Visitor::visitDelete_from_table(SQLParser::Delete_from_tableContext *co
     int count = 0;
     for (int i = 0; i < table.record_num; ++i) {
         bool flag = true;
-        auto record = table.get_record_range({i,i})[0];
+        auto record = table.get_record_range({i, i})[0];
         if (!record.has_value()) continue;
         for (auto &ptr: checker) {
-            if(ptr->column.size() == 1){ ptr->column = {table.name, ptr->column[0]}; }
+            if (ptr->column.size() == 1) { ptr->column = {table.name, ptr->column[0]}; }
             if (!ptr->choose(record.value())) {
                 flag = false;
                 break;
@@ -516,9 +545,9 @@ std::any Visitor::visitAlter_add_index(SQLParser::Alter_add_indexContext *contex
     auto &table = current_db->tables[table_index];
     auto index_name = context->Identifier(1)->getText();
     vector<string> keys;
-    for (auto &i:context->identifiers()->Identifier()){
+    for (auto &i: context->identifiers()->Identifier()) {
         keys.push_back(i->getText());
     }
-    table.add_index(index_name,keys);
+    table.add_index(index_name, keys);
     return {};
 }

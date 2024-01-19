@@ -14,7 +14,9 @@ like_string
  */
 #include <string>
 #include <vector>
-#include "dbsystem/database.h"
+
+using Value = std::variant<int, double, std::string>;
+typedef std::vector<Value> Record;
 
 enum class SelectorType {
     OPERATOR_EXPRESSION,
@@ -29,6 +31,7 @@ class Where {
 public:
     std::vector<std::string> column;
     virtual bool choose(Record record) = 0;
+    virtual ~Where() = default;
 };
 
 class OperatorExpression : public Where {
@@ -36,6 +39,7 @@ public:
     std::string op;
     std::string value;
     bool choose(Record record) override;
+    ~OperatorExpression() override = default;
 };
 
 

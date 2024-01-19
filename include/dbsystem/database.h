@@ -14,6 +14,8 @@
 #include "utils/error.h"
 #include "dbsystem/index.h"
 
+// -------db-------
+
 class Database;
 extern Database *current_db;
 

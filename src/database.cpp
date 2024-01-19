@@ -88,7 +88,7 @@ void Table::write_file() {
     auto name_length = (unsigned int) (name.size());
     buf[0] = name_length;
     memcpy(buf + 1, name.c_str(), name_length);
-    offset += (name_length + 3) / 4 * 4 + 1;
+    offset += (name_length + 3) / 4 + 1;
     // fields
     auto field_num = (unsigned int) (fields.size());
     buf[offset] = field_num;
@@ -98,7 +98,7 @@ void Table::write_file() {
         auto field_name_length = (unsigned int) (field.name.size());
         buf[offset] = field_name_length;
         memcpy(buf + offset + 1, field.name.c_str(), field_name_length);
-        offset += (field_name_length + 3) / 4 * 4 + 1;
+        offset += (field_name_length + 3) / 4 + 1;
         // type
         buf[offset] = (unsigned int) (field.type);
         offset += 1;
@@ -147,12 +147,12 @@ void Table::write_file() {
         buf[offset] = primary_key.name.size();
         offset += 1;
         memcpy(buf + offset, primary_key.name.c_str(), primary_key.name.size());
-        offset += (primary_key.name.size() + 3) / 4 * 4;
+        offset += (primary_key.name.size() + 3) / 4;
         for (const auto &key: primary_key.keys) {
             buf[offset] = key.size();
             offset += 1;
             memcpy(buf + offset, key.c_str(), key.size());
-            offset += (key.size() + 3) / 4 * 4;
+            offset += (key.size() + 3) / 4;
         }
     }
     buf[offset] = (unsigned int) (foreign_keys.size());
@@ -161,24 +161,24 @@ void Table::write_file() {
         buf[offset] = foreign_key.name.size();
         offset += 1;
         memcpy(buf + offset, foreign_key.name.c_str(), foreign_key.name.size());
-        offset += (foreign_key.name.size() + 3) / 4 * 4;
+        offset += (foreign_key.name.size() + 3) / 4;
         buf[offset] = foreign_key.table_name.size();
         offset += 1;
         memcpy(buf + offset, foreign_key.table_name.c_str(), foreign_key.table_name.size());
-        offset += (foreign_key.table_name.size() + 3) / 4 * 4;
+        offset += (foreign_key.table_name.size() + 3) / 4;
         buf[offset] = foreign_key.keys.size();
         offset += 1;
         for (const auto &key: foreign_key.keys) {
             buf[offset] = key.size();
             offset += 1;
             memcpy(buf + offset, key.c_str(), key.size());
-            offset += (key.size() + 3) / 4 * 4;
+            offset += (key.size() + 3) / 4;
         }
         for (const auto &key: foreign_key.ref_keys) {
             buf[offset] = key.size();
             offset += 1;
             memcpy(buf + offset, key.c_str(), key.size());
-            offset += (key.size() + 3) / 4 * 4;
+            offset += (key.size() + 3) / 4;
         }
     }
     // index
@@ -189,7 +189,7 @@ void Table::write_file() {
         buf[offset] = index.name.size();
         offset += 1;
         memcpy(buf + offset, index.name.c_str(), index.name.size());
-        offset += (index.name.size() + 3) / 4 * 4;
+        offset += (index.name.size() + 3) / 4;
     }
     // record num
     buf[offset] = 0;
@@ -205,7 +205,7 @@ void Table::read_file() {
     // name
     auto name_length = buf[0];
     name = std::string((char *) (buf + 1), name_length);
-    offset += (name_length + 3) / 4 * 4 + 1;
+    offset += (name_length + 3) / 4 + 1;
     // fields
     auto field_num = buf[offset];
     offset += 1;
@@ -214,7 +214,7 @@ void Table::read_file() {
         // name
         auto field_name_length = buf[offset];
         field.name = std::string((char *) (buf + offset + 1), field_name_length);
-        offset += (field_name_length + 3) / 4 * 4 + 1;
+        offset += (field_name_length + 3) / 4 + 1;
         // type
         field.type = (FieldType) (buf[offset]);
         offset += 1;
@@ -260,7 +260,6 @@ void Table::read_file() {
     auto key_num = buf[offset];
     offset += 1;
     auto key_name_length = buf[offset];
-    offset++;
     if (key_name_length != 0) {
         primary_key.name = string((char *) (buf + offset), key_name_length);
     }
@@ -268,7 +267,7 @@ void Table::read_file() {
         int value_length = (int) buf[offset];
         offset += 1;
         primary_key.keys.emplace_back((char *) (buf + offset), value_length);
-        offset += (value_length + 3) / 4 * 4;
+        offset += (value_length + 3) / 4;
     }
     int foreign_key_num = buf[offset];
     offset += 1;
@@ -277,24 +276,24 @@ void Table::read_file() {
         auto fk_name_length = buf[offset];
         offset += 1;
         foreign_key.name = string((char *) (buf + offset), fk_name_length);
-        offset += (fk_name_length + 3) / 4 * 4;
+        offset += (fk_name_length + 3) / 4;
         int table_name_length = buf[offset];
         offset += 1;
         foreign_key.table_name = string((char *) (buf + offset), table_name_length);
-        offset += (table_name_length + 3) / 4 * 4;
+        offset += (table_name_length + 3) / 4;
         auto fk_key_num = buf[offset];
         offset += 1;
         for (int j = 0; j < fk_key_num; ++j) {
             int value_length = buf[offset];
             offset += 1;
             foreign_key.keys.emplace_back((char *) (buf + offset), value_length);
-            offset += (value_length + 3) / 4 * 4;
+            offset += (value_length + 3) / 4;
         }
         for (int j = 0; j < fk_key_num; ++j) {
             int value_length = buf[offset];
             offset += 1;
             foreign_key.ref_keys.emplace_back((char *) (buf + offset), value_length);
-            offset += (value_length + 3) / 4 * 4;
+            offset += (value_length + 3) / 4;
         }
         foreign_keys.push_back(foreign_key);
     }
@@ -306,7 +305,7 @@ void Table::read_file() {
         auto index_name_length = buf[offset];
         offset += 1;
         tmp.name = string((char *) (buf + offset), index_name_length);
-        offset += (index_name_length + 3) / 4 * 4;
+        offset += (index_name_length + 3) / 4;
         _index.push_back(tmp);
     }
     this->meta_offset = offset;
@@ -376,6 +375,9 @@ void Table::add_index(const string &index_name, const vector<string> &keys) {
                     } catch (const std::bad_variant_access &e) {
                         throw Error("INDEX TYPE DOESN'T MATCH");
                     }
+                }
+                if (key[0]==7){
+                    int a = 0;
                 }
                 _index.back().insert(key, i + j);
                 _index.back().draw_tree();
@@ -686,6 +688,11 @@ void PageNode::split() {
     int left_num = (int) (records.size() / 2);
     for (int i = left_num; i < records.size(); ++i) {
         new_page.push_back({records[i].first, records[i].second});
+        if (!is_leaf){
+            auto child_page = meta.page_to_node(records[i].second);
+            child_page.parent_page = new_page.page_id;
+            child_page.update();
+        }
     }
     // update pred_page and succ_page
     if (succ_page != 0) {
@@ -893,7 +900,7 @@ void Index::write_file() const {
     auto name_length = (unsigned int) (name.size());
     buf[0] = name_length;
     memcpy(buf + 1, name.c_str(), name_length);
-    int offset = (name_length + 3) / 4 * 4 + 1;
+    int offset = (name_length + 3) / 4 + 1;
     // keys
     buf[offset] = key_num;
     offset += 1;
@@ -901,7 +908,7 @@ void Index::write_file() const {
         auto key_length = (unsigned int) (key.size());
         buf[offset] = key_length;
         memcpy(buf + offset + 1, key.c_str(), key_length);
-        offset += (key_length + 3) / 4 * 4 + 1;
+        offset += (key_length + 3) / 4 + 1;
     }
     // m
     buf[offset] = m;
@@ -928,7 +935,7 @@ void Index::read_file() {
     // name
     auto name_length = buf[0];
     name = std::string((char *) (buf + 1), name_length);
-    offset += (name_length + 3) / 4 * 4 + 1;
+    offset += (name_length + 3) / 4 + 1;
     // keys
     key_num = buf[offset];
     offset += 1;
@@ -936,7 +943,7 @@ void Index::read_file() {
         auto key_length = buf[offset];
         offset += 1;
         keys.emplace_back((char *) (buf + offset), key_length);
-        offset += (key_length + 3) / 4 * 4;
+        offset += (key_length + 3) / 4;
     }
     // m
     m = buf[offset];
@@ -997,4 +1004,62 @@ void Index::draw_tree() {
         cerr << endl;
         ++level;
     }
+}
+
+optional<vector<int>> Index::check(std::vector<std::shared_ptr<Where>> &checker) {
+    vector<int> res;
+    vector<shared_ptr<Where>> new_checker;
+    bool flag = false;
+    for(const auto& ptr: checker){
+        try {
+            auto operator_checker = dynamic_pointer_cast<OperatorExpression>(ptr);
+            flag = true;
+            if (operator_checker){
+                auto& key = operator_checker->column.back();
+                // todo: multiple keys
+                if (key == keys[0]){
+                    auto value = stoi(operator_checker->value);
+                    auto page_id = search_page_node({value});
+                    auto page = make_shared<PageNode>(page_to_node(page_id));
+                    auto op = operator_checker->op;
+                    if (op == "=" || op == ">" || op == ">="){
+                        // look forward
+                        do {
+                            auto records = page->to_vec();
+                            for (auto& record: records){
+                                if (op == "=" && record.first[0] == value){
+                                    res.push_back(record.second);
+                                } else if (op == ">" && record.first[0] > value){
+                                    res.push_back(record.second);
+                                } else if (op == ">=" && record.first[0] >= value){
+                                    res.push_back(record.second);
+                                }
+                            }
+                            page = make_shared<PageNode>(page_to_node((int) page->succ_page));
+                        } while (page->succ_page != 0);
+                    } else if (operator_checker->op == "<" || operator_checker->op == "<="){
+                        // look backward
+                        do {
+                            auto records = page->to_vec();
+                            for (auto& record: records){
+                                if (op == "<" && record.first[0] < value){
+                                    res.push_back(record.second);
+                                } else if (op == "<=" && record.first[0] <= value){
+                                    res.push_back(record.second);
+                                }
+                            }
+                            page = make_shared<PageNode>(page_to_node((int) page->pred_page));
+                        } while (page->pred_page != 0);
+                    }
+                } else {
+                    new_checker.push_back(ptr);
+                }
+            }
+        } catch (const std::bad_cast &e) {
+            new_checker.push_back(ptr);
+            continue;
+        }
+    }
+    checker = new_checker;
+    return res;
 }
