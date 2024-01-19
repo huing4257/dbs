@@ -96,7 +96,6 @@ std::any Visitor::visitCreate_table(SQLParser::Create_tableContext *context) {
         if (typeid(*field) == typeid(SQLParser::Primary_key_fieldContext)) {
             auto new_field = std::any_cast<PrimaryKey>(field->accept(this));
             table.primary_key = new_field;
-            table.add_index("primary", new_field.keys, true);
             continue;
         }
         if (typeid(*field) == typeid(SQLParser::Foreign_key_fieldContext)) {
@@ -279,14 +278,16 @@ std::any Visitor::visitLoad_table(SQLParser::Load_tableContext *context) {
             }
             data[i] = table.str_to_record(record);
             count++;
-
+            if(count % 10000 == 0){
+                cerr << count << endl;
+            }
         }
         data.resize(i);
         table.write_whole_page(data);
         for (int j = 0; j < i; ++j) {
             table.insert_into_index(data[j], start_count + j);
         }
-        cerr << count << endl;
+//        cerr << count << endl;
         if (flag) break;
 
     }
@@ -322,6 +323,7 @@ std::any Visitor::visitSelect_table(SQLParser::Select_tableContext *context) {
             throw Error("TABLE DOESN'T EXIST");
         }
         auto &table = current_db->tables[table_index];
+        auto record = table.get_record_range({0, 0})[0];
         int num = (int) table.record_num;
         vector<string> column_name;
         vector<int> selected_index;

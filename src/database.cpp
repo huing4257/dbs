@@ -36,12 +36,13 @@ void Database::use_database() {
         table.construct();
         tables.push_back(table);
         auto tname = tables.back().name;
-        for (auto index: tables.back()._index) {
+        for (auto &index: tables.back()._index) {
             auto is_open = fm->openFile(("data/base/" + name + "/" + tname + "." + index.name + ".index").c_str(),
                                         index.fileID);
             if (!is_open) throw Error("INDEX FILE OPEN FAILED");
             index.read_file();
             table.fill_index_ki(index);
+//            index.draw_tree();
         }
     }
 }
@@ -62,6 +63,8 @@ void Database::create_open_table(Table table) {
     fm->openFile(("data/base/" + name + "/" + table_name + ".db").c_str(), table.fileID);
     tables.push_back(table);
     tables.back().write_file();
+    auto &p = tables.back().primary_key;
+    tables.back().add_index("primary", p.keys, true);
 }
 
 void Database::drop_table(const string &table_name) {
@@ -376,7 +379,7 @@ void Table::add_index(const string &index_name, const vector<string> &keys, bool
     fm->openFile(("data/base/" + current_db->name + "/" + name + "." + index_name + ".index").c_str(), _index.back().fileID);
     _index.back().write_file();
     _index.back().init();
-    write_file();
+    update_index();
     fill_index_ki(_index.back());
     // todo: add index to index file
     unsigned int chunk_size = 1024;
@@ -582,8 +585,8 @@ vector<string> Table::record_to_str(const vector<Value> &record) const {
 // fast load, write whole new page
 void Table::write_whole_page(vector<std::vector<Value>> &data) {
     int index;
-    record_num += (int) data.size();
     int page_id = (record_num + 1) / record_num_per_page + 1;
+    record_num += (int) data.size();
     BufType buf = bpm->allocPage(fileID, page_id, index, false);
     buf += PAGE_HEADER / 4;
     for (auto &record: data) {
@@ -626,11 +629,16 @@ void PageNode::update() const {
 }
 
 // todo: to be optimized
-optional<int> PageNode::search(const Key &key) const {
+optional<int> PageNode::search(const Key &key, bool unique = false) const {
     int i = 0;
     auto records = to_vec();
     for (; i < records.size(); ++i) {
         if (records[i].first >= key) {
+            if (records[i].first == key) {
+                if (unique) {
+                    throw Error("DUPLICATE KEY");
+                }
+            }
             return records[i].second;
         }
     }
@@ -759,6 +767,7 @@ void PageNode::split() {
         new_root.insert(records[left_num - 1].first, page_id);
         new_root.insert(records[records.size() - 1].first, new_page.page_id);
         meta.root_page_id = new_root.page_id;
+        meta.write_file();
         new_page.parent_page = new_root.page_id;
         parent_page = new_root.page_id;
         new_root.update();
@@ -886,9 +895,7 @@ optional<int> Index::search_record(const Key &key) {
 void Index::insert(const Key &key, int record_id) {
     auto page_id = search_page_node(key);
     auto page = make_shared<PageNode>(page_to_node(page_id));
-    if (page->search(key) and is_unique) {
-        throw Error("DUPLICATE KEY");
-    }
+    page->search(key, is_unique);
     page->insert(key, record_id);
     while (page->record_num > m) {
         page->split();
@@ -1017,7 +1024,7 @@ void Index::draw_tree() {
     // to cerr
     cerr << "------- tree -------" << endl;
     std::queue<int> q;
-    q.push(root_page_id);
+    q.push(3);
     int level = 0;
     while (!q.empty()) {
         int nodes_in_current_level = q.size();
@@ -1032,12 +1039,18 @@ void Index::draw_tree() {
                  << " succ_page: " << node.succ_page << " parent_page: " << node.parent_page << " record_num: "
                  << node.record_num << endl;
             cerr << "records: ";
+            int count = 0;
             for (const auto &record: records) {
                 cerr << "(";
                 for (const auto &key: record.first) {
                     cerr << key << " ";
                 }
                 cerr << ", " << record.second << ") ";
+                count++;
+//                if (count>10){
+//                    cerr << "...";
+////                    break;
+//                }
             }
             cerr << "\n";// 在记录输出后增加一些空格分隔
             if (!node.is_leaf) {

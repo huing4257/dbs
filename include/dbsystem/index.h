@@ -68,7 +68,7 @@ public:
     void push_front(IndexRecord record);
     [[nodiscard]] std::vector<IndexRecord> to_vec() const;
     // only use when is_leaf == true
-    [[nodiscard]] std::optional<int> search(const Key &key) const;
+    [[nodiscard]] std::optional<int> search(const Key &key, bool unique) const;
     bool borrow();
     // only use when is_leaf == true
     void remove(const Key& key);
