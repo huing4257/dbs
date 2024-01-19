@@ -592,3 +592,33 @@ std::any Visitor::visitAlter_drop_index(SQLParser::Alter_drop_indexContext *cont
     table.drop_index(index_name);
     return {};
 }
+
+std::any Visitor::visitAlter_table_drop_pk(SQLParser::Alter_table_drop_pkContext *context) {
+    auto table_name = context->Identifier(0)->getText();
+    auto index_name = "primary";
+    auto table_index = current_db->get_table_index(table_name);
+    if (table_index == -1) {
+        throw Error("TABLE DOESN'T EXIST");
+    }
+    auto &table = current_db->tables[table_index];
+    table.drop_index(index_name);
+    table.primary_key.keys.clear();
+    table.write_file();
+    return {};
+}
+
+std::any Visitor::visitAlter_table_add_pk(SQLParser::Alter_table_add_pkContext *context) {
+    auto table_name = context->Identifier(0)->getText();
+    auto table_index = current_db->get_table_index(table_name);
+    if (table_index == -1) {
+        throw Error("TABLE DOESN'T EXIST");
+    }
+    auto &table = current_db->tables[table_index];
+    auto index_name = "primary";
+    vector<string> keys;
+    for (auto i :context->identifiers()->Identifier()) {
+        keys.push_back(i->getText());
+    }
+    table.add_index(index_name, keys, true);
+    return {};
+}

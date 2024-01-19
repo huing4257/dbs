@@ -20,15 +20,15 @@ int main(int argc, char *argv[]) {
             init_dir();
             return 0;
         }
+        if (strcmp(argv[i], "-u") == 0){
+            output_sys.output_type = OutputType::INTERACTIVE;
+        }
     }
-    // init database
-//    init_dir();
     init_database();
-    // main loop
     while (true) {
         std::string line;
         std::getline(std::cin, line);
-//        cerr << line << endl;
+        cerr << line << endl;
         if (line == "exit") {
             break;
         }
@@ -40,12 +40,15 @@ int main(int argc, char *argv[]) {
         if (tree->children.size() <= 1) {
             continue;
         }
-//        cerr << tree->toStringTree(&parser) << endl;
         auto visitor = Visitor();
         try {
             visitor.visit(tree);
         } catch (const Error &e) {
-            cout << "!ERROR " << e.what() << endl;
+            cout << "!ERROR " << endl;
+            cout << e.what() <<endl;
+        } catch (const std::exception &e) {
+            cout << "!ERROR " << endl;
+            cerr << "UNKNOWN "<< e.what() << endl;
         }
         if (current_db != nullptr) {
             cout << "@" << "DB:" << current_db->name << " ";

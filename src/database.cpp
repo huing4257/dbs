@@ -379,23 +379,52 @@ bool Table::construct() {
 }
 
 void Table::add_index(const string &index_name, const vector<string> &keys, bool unique) {
-    _index.emplace_back(index_name, keys, unique);
+    for (auto &i: _index) {
+        if (i.name == index_name) {
+            throw Error(index_name+" INDEX ALREADY EXISTS");
+        }
+    }
+    Index index(index_name, keys, unique);
     fm->createFile(("data/base/" + current_db->name + "/" + name + "." + index_name + ".index").c_str());
-    fm->openFile(("data/base/" + current_db->name + "/" + name + "." + index_name + ".index").c_str(), _index.back().fileID);
-    _index.back().write_file();
-    _index.back().init();
+    fm->openFile(("data/base/" + current_db->name + "/" + name + "." + index_name + ".index").c_str(), index.fileID);
+    index.write_file();
+    index.init();
     update_index();
-    fill_index_ki(_index.back());
+    fill_index_ki(index);
     // todo: add index to index file
-    unsigned int chunk_size = 1024;
-    for (int i = 0; i < record_num; i += chunk_size) {
-        auto content = get_record_range({i, min(i + chunk_size - 1, record_num - 1)});
-        for (int j = 0; j < content.size(); ++j) {
-            if (content[j]) {
-                insert_into_index(content[j].value(), i + j);
-//                _index.back().draw_tree();
+    try {
+        unsigned int chunk_size = 1024;
+        for (int i = 0; i < record_num; i += chunk_size) {
+            auto content = get_record_range({i, min(i + chunk_size - 1, record_num - 1)});
+            for (int j = 0; j < content.size(); ++j) {
+                if (content[j]) {
+                    Key key;
+                    for (auto _i: index.key_i) {
+                        try {
+                            int value = std::get<int>(content[j].value()[_i]);
+                            key.push_back(value);
+                        } catch (const std::bad_variant_access &e) {
+                            throw Error("INDEX TYPE DOESN'T MATCH");
+                        }
+                    }
+                    index.insert(key, i+j);
+                    //                _index.back().draw_tree();
+                }
             }
         }
+        _index.push_back(index);
+        if (index_name == "primary"){
+            primary_key.keys = index.keys;
+            primary_key.name = "primary";
+            primary_key_index = index.key_i;
+            for (auto i : primary_key_index) {
+                fields[i].allow_null = false;
+            }
+        }
+    } catch (const Error &e) {
+        filesystem::remove("data/base/" + current_db->name + "/" + name + "." + index_name + ".index");
+        cout << "!ERROR" << endl;
+        cout << e.what() << endl;
     }
 }
 
@@ -424,7 +453,7 @@ void Table::drop_index(std::string index_name) {
         _index.erase(it, _index.end());
         update_index();
     } else {
-        throw Error("INDEX DOESN'T EXIST");
+        throw Error(index_name + "INDEX DOESN'T EXIST");
     }
 }
 
