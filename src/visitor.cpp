@@ -209,9 +209,8 @@ std::any Visitor::visitDescribe_table(SQLParser::Describe_tableContext *context)
             line += (key + ",");
         }
         line.pop_back();
-        line += ");";
+        line += ");\n";
     }
-    line += "\n\n";
     if (!table.foreign_keys.empty()) {
         for (auto &foreign_key: table.foreign_keys) {
             line += "FOREIGN KEY ";
@@ -241,7 +240,7 @@ std::any Visitor::visitDescribe_table(SQLParser::Describe_tableContext *context)
                 line += (key + ",");
             }
             line.pop_back();
-            line += ")";
+            line += ");";
         }
     }
     output_sys.output({{line}});
@@ -364,6 +363,16 @@ std::any Visitor::visitSelect_table(SQLParser::Select_tableContext *context) {
                 auto record = table.get_record_range({i, i})[0];
                 if (!record.has_value()) continue;
                 content.push_back(record);
+            }
+            if (!checker.empty()) {
+                for (auto &ch: checker) {
+                    if (ch->column.size() == 1) { ch->column = {table.name, ch->column[0]}; }
+                    content.erase(std::remove_if(content.begin(), content.end(), [ch](optional<Record> &record) {
+                                      if (!record.has_value()) return false;
+                                      return !ch->choose(record.value());
+                                  }),
+                                  content.end());
+                }
             }
             projection_and_output(table, content, selected_index);
             return {};
@@ -546,6 +555,31 @@ std::any Visitor::visitAlter_add_index(SQLParser::Alter_add_indexContext *contex
     for (auto &i: context->identifiers()->Identifier()) {
         keys.push_back(i->getText());
     }
+    for (auto &i: table._index) {
+        if (i.keys.size() == keys.size()) {
+            bool flag = true;
+            for (int j = 0; j < keys.size(); ++j) {
+                if (i.keys[j] != keys[j]) {
+                    flag = false;
+                    break;
+                }
+            }
+            if (flag) {
+                throw Error("INDEX ALREADY EXISTS");
+            }
+        }
+    }
     table.add_index(index_name, keys);
+    return {};
+}
+std::any Visitor::visitAlter_drop_index(SQLParser::Alter_drop_indexContext *context) {
+    auto table_name = context->Identifier(0)->getText();
+    auto index_name = context->Identifier(1)->getText();
+    auto table_index = current_db->get_table_index(table_name);
+    if (table_index == -1) {
+        throw Error("TABLE DOESN'T EXIST");
+    }
+    auto &table = current_db->tables[table_index];
+    table.drop_index(index_name);
     return {};
 }

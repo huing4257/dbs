@@ -14,8 +14,6 @@
 #include "utils/error.h"
 #include "dbsystem/index.h"
 
-// -------db-------
-
 class Database;
 extern Database *current_db;
 
@@ -91,6 +89,8 @@ public:
     bool construct();
     void update() const;
     void add_index(const std::string& index_name, const std::vector<std::string>& keys);
+    void drop_index(std::string index_name);
+    void update_index() const;
     void fill_index_ki(Index &i){
         i.key_i.clear();
         for (auto &key : i.keys) {

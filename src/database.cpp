@@ -316,9 +316,24 @@ void Table::read_file() {
 
 void Table::update() const {
     int index;
-    // buf using 4 bytes as a unit
     BufType buf = bpm->getPage(fileID, 0, index);
     buf[meta_offset] = record_num;
+    bpm->markDirty(index);
+}
+
+void Table::update_index() const{
+    int index;
+    BufType buf = bpm->getPage(fileID, 0, index);
+    auto offset = meta_offset + 1;
+    buf[offset] = (unsigned int) (_index.size());
+    offset += 1;
+    // obtain name, construct later
+    for (const auto &inde: _index) {
+        buf[offset] = inde.name.size();
+        offset += 1;
+        memcpy(buf + offset, inde.name.c_str(), inde.name.size());
+        offset += (inde.name.size() + 3) / 4;
+    }
     bpm->markDirty(index);
 }
 
@@ -385,6 +400,20 @@ void Table::add_index(const string &index_name, const vector<string> &keys) {
 //                _index.back().draw_tree();
             }
         }
+    }
+}
+
+void Table::drop_index(std::string index_name) {
+    auto it = std::remove_if(_index.begin(), _index.end(), [&index_name](const Index &index) {
+        return index.name == index_name;
+    });
+    if (it != _index.end()) {
+        fm->closeFile(it->fileID);
+        std::filesystem::remove("data/base/" + current_db->name + "/" + name + "." + index_name + ".index");
+        _index.erase(it, _index.end());
+        update_index();
+    } else {
+        throw Error("INDEX DOESN'T EXIST");
     }
 }
 
@@ -484,6 +513,18 @@ bool Table::add_record(const vector<Value> &record) {
     buf = buf + offset * record_length / 4 + PAGE_HEADER / 4;
     record_to_buf(record, buf);
     bpm->markDirty(index);
+    for (auto &i: _index) {
+        Key key;
+        for (auto _i: i.key_i) {
+            try {
+                int value = std::get<int>(record[_i]);
+                key.push_back(value);
+            } catch (const std::bad_variant_access &e) {
+                throw Error("INDEX TYPE DOESN'T MATCH");
+            }
+        }
+        i.insert(key, record_num);
+    }
     record_num++;
     return true;
 }
@@ -1018,7 +1059,7 @@ optional<vector<int>> Index::check(std::vector<std::shared_ptr<Where>> &checker)
             if (operator_checker) {
                 auto &key = operator_checker->column.back();
                 // todo: multiple keys
-                if (key == keys[0]) {
+                if (key == keys[0] and !flag) {
                     flag = true;
                     auto value = stoi(operator_checker->value);
                     auto page_id = search_page_node({value});
