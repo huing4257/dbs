@@ -20,8 +20,25 @@ void Output::batch_output(const std::vector<std::vector<std::string>> &data) {
 
 void Output::interactive_output(const std::vector<std::vector<std::string>> &data) {
     for (auto &row: data) {
+        std::cout<< "|";
         for (auto &col: row) {
-            std::cout << col << "\t";
+            for (int i = 0; i < col.size(); i++) {
+                std::cout << "-";
+            }
+            std::cout << "|";
+        }
+        std::cout << std::endl;
+        std::cout<< "|";
+        for (auto &col: row) {
+            std::cout << col << "|";
+        }
+        std::cout << std::endl;
+        std::cout << "|";
+        for (auto &col: row) {
+            for (int i = 0; i < col.size(); i++) {
+                std::cout << "-";
+            }
+            std::cout << "|";
         }
         std::cout << std::endl;
     }

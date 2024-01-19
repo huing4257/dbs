@@ -24,11 +24,21 @@ int main(int argc, char *argv[]) {
             output_sys.output_type = OutputType::INTERACTIVE;
         }
     }
+    if (output_sys.output_type == OutputType::INTERACTIVE){
+        cout << "init..." <<endl;
+    }
     init_database();
     while (true) {
+        auto inter = output_sys.output_type == OutputType::INTERACTIVE;
+        if (inter){
+            cout << "sql> ";
+            if (current_db != nullptr) {
+                cout << "(" << current_db->name << ")";
+            }
+        }
         std::string line;
         std::getline(std::cin, line);
-        cerr << line << endl;
+//        cerr << line << endl;
         if (line == "exit") {
             break;
         }
@@ -50,10 +60,12 @@ int main(int argc, char *argv[]) {
             cout << "!ERROR " << endl;
             cerr << "UNKNOWN "<< e.what() << endl;
         }
-        if (current_db != nullptr) {
-            cout << "@" << "DB:" << current_db->name << " ";
+        if(!inter){
+            if (current_db != nullptr) {
+                cout << "@"<< "DB:" << current_db->name << " ";
+            }
+            cout << "@" <<line << endl;
         }
-        cout << "@" <<line << endl;
     }
     return 0;
 }
