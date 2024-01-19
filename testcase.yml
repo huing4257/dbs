@@ -6,6 +6,7 @@ run:
   flags:
     - no_use
     - query
+    - data
     - index
     - pk
     - comb
