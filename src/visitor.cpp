@@ -363,11 +363,9 @@ std::any Visitor::visitSelect_table(SQLParser::Select_tableContext *context) {
             for (auto &i: rid.value()) {
                 auto record = table.get_record_range({i, i})[0];
                 if (!record.has_value()) continue;
-                vector<string> selected_record;
-                selected_record.reserve(selected_index.size());
-
-                output_sys.output({selected_record});
+                content.push_back(record);
             }
+            projection_and_output(table, content, selected_index);
             return {};
         }
         for (int i = 0; i < num; i += chunk_size) {

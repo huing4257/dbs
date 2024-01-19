@@ -9,8 +9,8 @@
 #include "utils/error.h"
 #include <algorithm>
 #include <cstring>
-#include <utility>
 #include <queue>
+#include <utility>
 
 auto fm = std::make_unique<FileManager>();
 auto bpm = std::make_unique<BufPageManager>(fm.get());
@@ -181,6 +181,10 @@ void Table::write_file() {
             offset += (key.size() + 3) / 4;
         }
     }
+    // record num
+    buf[offset] = 0;
+    meta_offset = offset;
+    offset += 1;
     // index
     buf[offset] = (unsigned int) (_index.size());
     offset += 1;
@@ -191,9 +195,6 @@ void Table::write_file() {
         memcpy(buf + offset, index.name.c_str(), index.name.size());
         offset += (index.name.size() + 3) / 4;
     }
-    // record num
-    buf[offset] = 0;
-    meta_offset = offset;
     bpm->markDirty(page_index);
 }
 
@@ -297,6 +298,9 @@ void Table::read_file() {
         }
         foreign_keys.push_back(foreign_key);
     }
+    this->meta_offset = offset;
+    record_num = buf[offset];
+    offset += 1;
     // index
     int index_num = buf[offset];
     offset += 1;
@@ -308,8 +312,6 @@ void Table::read_file() {
         offset += (index_name_length + 3) / 4;
         _index.push_back(tmp);
     }
-    this->meta_offset = offset;
-    record_num = buf[offset];
 }
 
 void Table::update() const {
@@ -376,11 +378,11 @@ void Table::add_index(const string &index_name, const vector<string> &keys) {
                         throw Error("INDEX TYPE DOESN'T MATCH");
                     }
                 }
-                if (key[0]==7){
+                if (key[0] == 7) {
                     int a = 0;
                 }
                 _index.back().insert(key, i + j);
-                _index.back().draw_tree();
+//                _index.back().draw_tree();
             }
         }
     }
@@ -596,13 +598,13 @@ void PageNode::insert(const Key &key, int id) {
     BufType buf = bpm->getPage(meta.fileID, page_id, index);
 
     auto records = to_vec();
-    if (records.empty() or key>records.back().first){
-        push_back({key,id});
-        if ( parent_page == 0 ) return;
+    if (records.empty() or key > records.back().first) {
+        push_back({key, id});
+        if (parent_page == 0) return;
         // update parent and ancestor
         auto parent_page_node = make_shared<PageNode>(meta.page_to_node((int) parent_page));
         parent_page_node->update_record(get_index_in_parent(), key);
-        while (parent_page_node->parent_page != 0){
+        while (parent_page_node->parent_page != 0) {
             auto i = parent_page_node->get_index_in_parent();
             parent_page_node = make_shared<PageNode>(meta.page_to_node((int) parent_page_node->parent_page));
             parent_page_node->update_record(i, key);
@@ -681,14 +683,14 @@ void PageNode::push_back(IndexRecord record) {
 
 void PageNode::split() {
     PageNode new_page = {
-            (unsigned int)meta.page_num, meta, is_leaf, page_id, succ_page, parent_page, 0};
+            (unsigned int) meta.page_num, meta, is_leaf, page_id, succ_page, parent_page, 0};
     meta.page_num += 1;
     // copy second half of records to new page
     auto records = to_vec();
     int left_num = (int) (records.size() / 2);
     for (int i = left_num; i < records.size(); ++i) {
         new_page.push_back({records[i].first, records[i].second});
-        if (!is_leaf){
+        if (!is_leaf) {
             auto child_page = meta.page_to_node(records[i].second);
             child_page.parent_page = new_page.page_id;
             child_page.update();
@@ -707,7 +709,7 @@ void PageNode::split() {
     if (parent_page == 0) {
         // create new root
         PageNode new_root = {
-                (unsigned int)meta.page_num, meta, false, 0, 0, 0, 0};
+                (unsigned int) meta.page_num, meta, false, 0, 0, 0, 0};
         new_root.update();
         meta.page_num++;
         new_root.insert(records[left_num - 1].first, page_id);
@@ -880,11 +882,11 @@ int PageNode::get_index_in_parent() {
 Index::Index(std::string _name, std::vector<std::string> _keys, bool _is_unique) {
     name = std::move(_name);
     keys = std::move(_keys);
-//    m = (PAGE_SIZE - 5) / (4 * (keys.size() + 1));
-//    m = (m/2)*2 - 1;
-//    if (m < 3) {
-//        throw Error("KEYS TOO LONG");
-//    }
+    //    m = (PAGE_SIZE - 5) / (4 * (keys.size() + 1));
+    //    m = (m/2)*2 - 1;
+    //    if (m < 3) {
+    //        throw Error("KEYS TOO LONG");
+    //    }
     m = 3;
     key_num = keys.size();
     root_page_id = 1;
@@ -975,7 +977,7 @@ void Index::draw_tree() {
     int level = 0;
     while (!q.empty()) {
         int nodes_in_current_level = q.size();
-        cerr << "Level " << level << ": \n";  // 输出层序号
+        cerr << "Level " << level << ": \n";// 输出层序号
         while (nodes_in_current_level > 0) {
             int page_id = q.front();
             q.pop();
@@ -993,7 +995,7 @@ void Index::draw_tree() {
                 }
                 cerr << ", " << record.second << ") ";
             }
-            cerr << "\n";  // 在记录输出后增加一些空格分隔
+            cerr << "\n";// 在记录输出后增加一些空格分隔
             if (!node.is_leaf) {
                 for (const auto &record: records) {
                     q.push(record.second);
@@ -1010,41 +1012,42 @@ optional<vector<int>> Index::check(std::vector<std::shared_ptr<Where>> &checker)
     vector<int> res;
     vector<shared_ptr<Where>> new_checker;
     bool flag = false;
-    for(const auto& ptr: checker){
+    for (const auto &ptr: checker) {
         try {
             auto operator_checker = dynamic_pointer_cast<OperatorExpression>(ptr);
-            flag = true;
-            if (operator_checker){
-                auto& key = operator_checker->column.back();
+            if (operator_checker) {
+                auto &key = operator_checker->column.back();
                 // todo: multiple keys
-                if (key == keys[0]){
+                if (key == keys[0]) {
+                    flag = true;
                     auto value = stoi(operator_checker->value);
                     auto page_id = search_page_node({value});
                     auto page = make_shared<PageNode>(page_to_node(page_id));
                     auto op = operator_checker->op;
-                    if (op == "=" || op == ">" || op == ">="){
+                    if (op == "=" || op == ">" || op == ">=") {
                         // look forward
-                        do {
+                        while (true) {
                             auto records = page->to_vec();
-                            for (auto& record: records){
-                                if (op == "=" && record.first[0] == value){
+                            for (auto &record: records) {
+                                if (op == "=" && record.first[0] == value) {
                                     res.push_back(record.second);
-                                } else if (op == ">" && record.first[0] > value){
+                                } else if (op == ">" && record.first[0] > value) {
                                     res.push_back(record.second);
-                                } else if (op == ">=" && record.first[0] >= value){
+                                } else if (op == ">=" && record.first[0] >= value) {
                                     res.push_back(record.second);
                                 }
                             }
+                            if (page->succ_page == 0) break;
                             page = make_shared<PageNode>(page_to_node((int) page->succ_page));
-                        } while (page->succ_page != 0);
-                    } else if (operator_checker->op == "<" || operator_checker->op == "<="){
+                        }
+                    } else if (operator_checker->op == "<" || operator_checker->op == "<=") {
                         // look backward
                         do {
                             auto records = page->to_vec();
-                            for (auto& record: records){
-                                if (op == "<" && record.first[0] < value){
+                            for (auto &record: records) {
+                                if (op == "<" && record.first[0] < value) {
                                     res.push_back(record.second);
-                                } else if (op == "<=" && record.first[0] <= value){
+                                } else if (op == "<=" && record.first[0] <= value) {
                                     res.push_back(record.second);
                                 }
                             }
@@ -1060,6 +1063,7 @@ optional<vector<int>> Index::check(std::vector<std::shared_ptr<Where>> &checker)
             continue;
         }
     }
+    if (!flag) return nullopt;
     checker = new_checker;
     return res;
 }
