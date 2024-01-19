@@ -88,9 +88,10 @@ public:
     void read_file();
     bool construct();
     void update() const;
-    void add_index(const std::string& index_name, const std::vector<std::string>& keys);
+    void add_index(const std::string& index_name, const std::vector<std::string>& keys, bool unique = false);
     void drop_index(std::string index_name);
     void update_index() const;
+    void insert_into_index(const std::vector<Value> &record, int record_id);
     void fill_index_ki(Index &i){
         i.key_i.clear();
         for (auto &key : i.keys) {

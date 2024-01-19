@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.5 FATAL_ERROR)
 
 project(dbs)
 
-option(ASAN "EnableASAN" OFF)
+option(ASANoff "EnableASAN" OFF)
 
 if (ASAN)
     include_directories(

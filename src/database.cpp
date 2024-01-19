@@ -3,7 +3,6 @@
 //
 
 #include "dbsystem/database.h"
-#include "dbsystem/index.h"
 #include "filesystem/bufmanager/BufPageManager.h"
 #include "filesystem/fileio/FileManager.h"
 #include "utils/error.h"
@@ -371,8 +370,8 @@ bool Table::construct() {
     return true;
 }
 
-void Table::add_index(const string &index_name, const vector<string> &keys) {
-    _index.emplace_back(index_name, keys, false);
+void Table::add_index(const string &index_name, const vector<string> &keys, bool unique) {
+    _index.emplace_back(index_name, keys, unique);
     fm->createFile(("data/base/" + current_db->name + "/" + name + "." + index_name + ".index").c_str());
     fm->openFile(("data/base/" + current_db->name + "/" + name + "." + index_name + ".index").c_str(), _index.back().fileID);
     _index.back().write_file();
@@ -385,22 +384,25 @@ void Table::add_index(const string &index_name, const vector<string> &keys) {
         auto content = get_record_range({i, min(i + chunk_size - 1, record_num - 1)});
         for (int j = 0; j < content.size(); ++j) {
             if (content[j]) {
-                Key key;
-                for (auto _i: _index.back().key_i) {
-                    try {
-                        int value = std::get<int>(content[j].value()[_i]);
-                        key.push_back(value);
-                    } catch (const std::bad_variant_access &e) {
-                        throw Error("INDEX TYPE DOESN'T MATCH");
-                    }
-                }
-                if (key[0] == 7) {
-                    int a = 0;
-                }
-                _index.back().insert(key, i + j);
+                insert_into_index(content[j].value(), i + j);
 //                _index.back().draw_tree();
             }
         }
+    }
+}
+
+void Table::insert_into_index(const std::vector<Value> &record, int record_id) {
+    for (auto &i: _index) {
+        Key key;
+        for (auto _i: i.key_i) {
+            try {
+                int value = std::get<int>(record[_i]);
+                key.push_back(value);
+            } catch (const std::bad_variant_access &e) {
+                throw Error("INDEX TYPE DOESN'T MATCH");
+            }
+        }
+        i.insert(key, record_id);
     }
 }
 
@@ -924,12 +926,12 @@ int PageNode::get_index_in_parent() {
 Index::Index(std::string _name, std::vector<std::string> _keys, bool _is_unique) {
     name = std::move(_name);
     keys = std::move(_keys);
-    //    m = (PAGE_SIZE - 5) / (4 * (keys.size() + 1));
-    //    m = (m/2)*2 - 1;
-    //    if (m < 3) {
-    //        throw Error("KEYS TOO LONG");
-    //    }
-    m = 3;
+        m = (PAGE_SIZE - 5 * 4) / (4 * (keys.size() + 1));
+        m = (m/2)*2 - 1;
+        if (m < 3) {
+            throw Error("KEYS TOO LONG");
+        }
+//    m = 3;
     key_num = keys.size();
     root_page_id = 1;
     page_num = 1;

@@ -96,6 +96,7 @@ std::any Visitor::visitCreate_table(SQLParser::Create_tableContext *context) {
         if (typeid(*field) == typeid(SQLParser::Primary_key_fieldContext)) {
             auto new_field = std::any_cast<PrimaryKey>(field->accept(this));
             table.primary_key = new_field;
+            table.add_index("primary", new_field.keys, true);
             continue;
         }
         if (typeid(*field) == typeid(SQLParser::Foreign_key_fieldContext)) {
@@ -263,6 +264,7 @@ std::any Visitor::visitLoad_table(SQLParser::Load_tableContext *context) {
     while (true) {
         bool flag = false;
         int i = 0;
+        int start_count = count;
         for (; i < table.record_num_per_page; ++i) {
             if (!getline(file, line)) {
                 flag = true;
@@ -277,10 +279,16 @@ std::any Visitor::visitLoad_table(SQLParser::Load_tableContext *context) {
             }
             data[i] = table.str_to_record(record);
             count++;
+
         }
         data.resize(i);
         table.write_whole_page(data);
+        for (int j = 0; j < i; ++j) {
+            table.insert_into_index(data[j], start_count + j);
+        }
+        cerr << count << endl;
         if (flag) break;
+
     }
     file.close();
     output_sys.output({{"rows"}, {to_string(count)}});
