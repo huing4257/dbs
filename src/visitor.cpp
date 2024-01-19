@@ -389,9 +389,9 @@ std::any Visitor::visitSelect_table(SQLParser::Select_tableContext *context) {
                                   content.end());
                 }
             }
+            // projection
+            projection_and_output(table, content, selected_index);
         }
-        // projection
-        projection_and_output(table, content, selected_index);
     }
     return {};
 }

@@ -261,6 +261,7 @@ void Table::read_file() {
     auto key_num = buf[offset];
     offset += 1;
     auto key_name_length = buf[offset];
+    offset +=1;
     if (key_name_length != 0) {
         primary_key.name = string((char *) (buf + offset), key_name_length);
     }
