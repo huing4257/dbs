@@ -374,7 +374,6 @@ bool Table::construct() {
         primary_key_index.push_back(index);
         fields[index].allow_null = false;
     }
-    //todo: check foreign key
     return true;
 }
 
@@ -391,7 +390,6 @@ void Table::add_index(const string &index_name, const vector<string> &keys, bool
     index.init();
     update_index();
     fill_index_ki(index);
-    // todo: add index to index file
     try {
         unsigned int chunk_size = 1024;
         for (int i = 0; i < record_num; i += chunk_size) {
@@ -518,7 +516,6 @@ std::vector<Value> Table::buf_to_record(const unsigned int *buf) const {
     return record;
 }
 
-//todo: to be optimized
 vector<optional<vector<Value>>> Table::get_record_range(std::pair<int, int> range) const {
     int index;
     int start = range.first;
@@ -547,7 +544,6 @@ vector<optional<vector<Value>>> Table::get_record_range(std::pair<int, int> rang
 }
 
 bool Table::add_record(const vector<Value> &record) {
-    // todo: find deleted record
     int index;
     int page_id = (record_num + 1) / record_num_per_page + 1;
     int offset = (record_num) % record_num_per_page;
@@ -664,7 +660,6 @@ void PageNode::update() const {
     bpm->markDirty(index);
 }
 
-// todo: to be optimized
 optional<int> PageNode::search(const Key &key, bool unique = false) const {
     int i = 0;
     auto records = to_vec();
@@ -949,9 +944,6 @@ void Index::remove(const Key &key) {
     if (page->borrow()) {
         return;
     }
-    // merge
-    //    int child_index = page.
-    //todo
 }
 
 int PageNode::get_index_in_parent() {
@@ -1110,7 +1102,6 @@ optional<vector<int>> Index::check(std::vector<std::shared_ptr<Where>> &checker)
             auto operator_checker = dynamic_pointer_cast<OperatorExpression>(ptr);
             if (operator_checker) {
                 auto &key = operator_checker->column.back();
-                // todo: multiple keys
                 if (key == keys[0] and !flag) {
                     flag = true;
                     auto value = stoi(operator_checker->value);

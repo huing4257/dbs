@@ -622,3 +622,9 @@ std::any Visitor::visitAlter_table_add_pk(SQLParser::Alter_table_add_pkContext *
     table.add_index(index_name, keys, true);
     return {};
 }
+std::any Visitor::visitAlter_table_add_foreign_key(SQLParser::Alter_table_add_foreign_keyContext *context) {
+    return std::any();
+}
+std::any Visitor::visitAlter_table_drop_foreign_key(SQLParser::Alter_table_drop_foreign_keyContext *context) {
+    return std::any();
+}
