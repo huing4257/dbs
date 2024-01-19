@@ -28,7 +28,7 @@ int main(int argc, char *argv[]) {
     while (true) {
         std::string line;
         std::getline(std::cin, line);
-        cerr << line << endl;
+//        cerr << line << endl;
         if (line == "exit") {
             break;
         }

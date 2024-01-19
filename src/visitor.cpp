@@ -323,7 +323,6 @@ std::any Visitor::visitSelect_table(SQLParser::Select_tableContext *context) {
             throw Error("TABLE DOESN'T EXIST");
         }
         auto &table = current_db->tables[table_index];
-        auto record = table.get_record_range({0, 0})[0];
         int num = (int) table.record_num;
         vector<string> column_name;
         vector<int> selected_index;

@@ -64,7 +64,9 @@ void Database::create_open_table(Table table) {
     tables.push_back(table);
     tables.back().write_file();
     auto &p = tables.back().primary_key;
-    tables.back().add_index("primary", p.keys, true);
+    if (!p.keys.empty()){
+        tables.back().add_index("primary", p.keys, true);
+    }
 }
 
 void Database::drop_table(const string &table_name) {
@@ -262,10 +264,12 @@ void Table::read_file() {
     primary_key.keys.clear();
     auto key_num = buf[offset];
     offset += 1;
-    auto key_name_length = buf[offset];
-    offset +=1;
-    if (key_name_length != 0) {
-        primary_key.name = string((char *) (buf + offset), key_name_length);
+    if (key_num){
+        auto key_name_length = buf[offset];
+        offset += 1;
+        if (key_name_length != 0) {
+            primary_key.name = string((char *) (buf + offset), key_name_length);
+        }
     }
     for (int i = 0; i < key_num; ++i) {
         int value_length = (int) buf[offset];
@@ -305,6 +309,7 @@ void Table::read_file() {
     record_num = buf[offset];
     offset += 1;
     // index
+    auto bbb = buf + offset;
     int index_num = buf[offset];
     offset += 1;
     for (int i = 0; i < index_num; ++i) {
@@ -493,6 +498,8 @@ vector<optional<vector<Value>>> Table::get_record_range(std::pair<int, int> rang
         throw Error("START INDEX IS LARGER THAN END INDEX");
     }
     if (start < 0 || end >= record_num) {
+        auto a = _index[0];
+        a.draw_tree();
         throw Error("INDEX OUT OF RANGE");
     }
     vector<optional<vector<Value>>> records;
@@ -1024,7 +1031,7 @@ void Index::draw_tree() {
     // to cerr
     cerr << "------- tree -------" << endl;
     std::queue<int> q;
-    q.push(3);
+    q.push(root_page_id);
     int level = 0;
     while (!q.empty()) {
         int nodes_in_current_level = q.size();
@@ -1099,7 +1106,7 @@ optional<vector<int>> Index::check(std::vector<std::shared_ptr<Where>> &checker)
                         }
                     } else if (operator_checker->op == "<" || operator_checker->op == "<=") {
                         // look backward
-                        do {
+                        while (true) {
                             auto records = page->to_vec();
                             for (auto &record: records) {
                                 if (op == "<" && record.first[0] < value) {
@@ -1108,8 +1115,9 @@ optional<vector<int>> Index::check(std::vector<std::shared_ptr<Where>> &checker)
                                     res.push_back(record.second);
                                 }
                             }
+                            if (page->succ_page == 0) break;
                             page = make_shared<PageNode>(page_to_node((int) page->pred_page));
-                        } while (page->pred_page != 0);
+                        }
                     }
                 } else {
                     new_checker.push_back(ptr);
